@@ -1,0 +1,10 @@
+[package]
+name    = "glb"
+version = "0.1.0"
+loft    = ">=0.8"
+
+[library]
+entry = "src/glb.loft"
+
+[dependencies]
+mesh3d = ">=0.1"

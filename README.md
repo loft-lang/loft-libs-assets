@@ -28,13 +28,15 @@ forced consumers to install a GPU stack to process a PNG.
 
 | Subdir | Package | Status |
 |---|---|---|
-| `glb/` | `glb` — glTF binary 3D scenes (meshes, materials, animations) | TODO (W.0b — promote from graphics submodule) |
+| [`mesh3d/`](mesh3d/) | `mesh3d` — 3D geometry primitives (Vec/Mat, Mesh, Scene) | v0.1.0 (shipped 2026-05-31) |
+| [`glb/`](glb/) | `glb` — glTF 2.0 binary writer (depends on mesh3d) | v0.1.0 (shipped 2026-05-31) |
 | `imaging/` | `imaging` — PNG load / save + pixel manipulation | currently shipped in [`loft-libs-graphics`](https://github.com/loft-lang/loft-libs-graphics); migrates here at next major-version boundary |
 
 ## Installing a package
 
 ```sh
-loft install glb           # 3D scene format
+loft install mesh3d        # 3D geometry types (Vec, Mat, Mesh, Scene)
+loft install glb           # glTF 2.0 binary writer (pulls mesh3d transitively)
 loft install imaging       # PNG (once migrated)
 ```
 
@@ -49,6 +51,7 @@ packages in this multi-package repo (same as `loft-libs-core` and
 
 | Package + version | Git tag |
 |---|---|
+| mesh3d 0.1.0 | `mesh3d-v0.1.0` |
 | glb 0.1.0 | `glb-v0.1.0` |
 | imaging 0.1.0 (when migrated) | `imaging-v0.1.0` |
 

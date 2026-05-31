@@ -1,0 +1,27 @@
+// Copyright (c) 2026 Jurjen Stellingwerff
+// SPDX-License-Identifier: LGPL-3.0-or-later
+//
+// mesh3d — 3D geometry primitives for loft.
+//
+// Aggregates three sub-modules that previously lived inside the
+// `graphics` package as internal submodules:
+//
+//   - math  — Vec2 / Vec3 / Vec4 + Mat4 + vector/matrix ops
+//   - mesh  — Vertex / Triangle / Mesh + sphere generation +
+//             flatten-to-floats helpers for GL upload
+//   - scene — Scene / Node / Material / Camera / Light + scene
+//             graph construction
+//
+// Promoting these into a standalone package lets non-rendering
+// consumers (asset processors, glb readers, headless physics)
+// use the types without pulling in `graphics`'s OpenGL stack.
+//
+// Public re-exports below — consumers do `use mesh3d;` and access
+// `Vec3`, `Mesh`, `Scene`, etc. at the top level.  Internally each
+// submodule is still importable individually
+// (`use math;` / `use mesh;` / `use scene;`) for cases where only
+// one sub-surface is needed.
+
+use math;
+use mesh;
+use scene;
