@@ -141,12 +141,12 @@ fn test_scene_glb_json_material_in_primitive() {
    // Read the JSON text directly (sm_jlen bytes after offset 20).
    sm_json = sm_f#read(sm_jlen) as text;
    // "material" must appear inside "primitives" (mesh section).
-   assert(sm_json.contains("\"primitives\""), "has primitives");
-   assert(sm_json.contains("\"material\":"), "material present");
+   assert(sm_json.find("\"primitives\"") != null, "has primitives");
+   assert(sm_json.find("\"material\":") != null, "material present");
    // nodes section must NOT reference material.
    // The node JSON should be {"name":"cube","mesh":0} — no "material" key.
    // We check by verifying node object ends with "mesh" field.
-   assert(sm_json.contains("\"mesh\":0}}"), "node ends with mesh ref only");
+   assert(sm_json.find("\"mesh\":0}}") != null, "node ends with mesh ref only");
   }
   delete("test_sglb_g.glb");
 }
@@ -170,7 +170,7 @@ fn test_scene_glb_node_transform() {
    st_jlen = st_f#read(4) as i32;
    st_f#read(4) as i32;
    st_json = st_f#read(st_jlen) as text;
-   assert(st_json.contains("\"matrix\":"), "non-identity has matrix field");
+   assert(st_json.find("\"matrix\":") != null, "non-identity has matrix field");
   }
   delete("test_sglb_h.glb");
 }
@@ -190,7 +190,7 @@ fn test_scene_glb_identity_no_matrix() {
    si_jlen = si_f#read(4) as i32;
    si_f#read(4) as i32;
    si_json = si_f#read(si_jlen) as text;
-   assert(!si_json.contains("\"matrix\":"), "identity has no matrix field");
+   assert(si_json.find("\"matrix\":") == null, "identity has no matrix field");
   }
   delete("test_sglb_i.glb");
 }
