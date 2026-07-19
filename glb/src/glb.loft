@@ -10,7 +10,7 @@
 use mesh3d;
 
 // Build the float32 position buffer (3 × f32 per vertex, x y z).
-fn glb_pos_buf(verts: vector<mesh::Vertex>) -> vector<single> {
+fn glb_pos_buf(verts: vector<Vertex>) -> vector<single> {
   result = [];
   for v in verts {
     result += [v.pos.x as single, v.pos.y as single, v.pos.z as single];
@@ -19,7 +19,7 @@ fn glb_pos_buf(verts: vector<mesh::Vertex>) -> vector<single> {
 }
 
 // Build the float32 normal buffer (3 × f32 per vertex).
-fn glb_norm_buf(verts: vector<mesh::Vertex>) -> vector<single> {
+fn glb_norm_buf(verts: vector<Vertex>) -> vector<single> {
   result = [];
   for v in verts {
     result += [v.normal.x as single, v.normal.y as single, v.normal.z as single];
@@ -28,7 +28,7 @@ fn glb_norm_buf(verts: vector<mesh::Vertex>) -> vector<single> {
 }
 
 // Build the float32 UV buffer (2 × f32 per vertex, u=x v=y).
-fn glb_uv_buf(verts: vector<mesh::Vertex>) -> vector<single> {
+fn glb_uv_buf(verts: vector<Vertex>) -> vector<single> {
   result = [];
   for v in verts {
     result += [v.uv.x as single, v.uv.y as single];
@@ -39,7 +39,7 @@ fn glb_uv_buf(verts: vector<mesh::Vertex>) -> vector<single> {
 // Build the uint32 index buffer (3 indices per triangle: a, b, c).
 // Element type is `i32` so narrow-vector storage is 4 bytes per index,
 // matching the glTF BIN chunk-size accounting for `f += glb_idx_buf(...)`.
-fn glb_idx_buf(tris: vector<mesh::Triangle>) -> vector<i32> {
+fn glb_idx_buf(tris: vector<Triangle>) -> vector<i32> {
   result: vector<i32> = [];
   for t in tris {
     result += [t.a as i32, t.b as i32, t.c as i32];
@@ -48,9 +48,9 @@ fn glb_idx_buf(tris: vector<mesh::Triangle>) -> vector<i32> {
 }
 
 // Compute the minimum position across all vertices (component-wise).
-fn glb_pos_min(verts: vector<mesh::Vertex>) -> math::Vec3 {
+fn glb_pos_min(verts: vector<Vertex>) -> Vec3 {
   if verts.len() == 0 {
-    math::vec3(0.0, 0.0, 0.0)
+    vec3(0.0, 0.0, 0.0)
   } else {
     mx = verts[0].pos.x;
     my = verts[0].pos.y;
@@ -60,14 +60,14 @@ fn glb_pos_min(verts: vector<mesh::Vertex>) -> math::Vec3 {
       if v.pos.y < my { my = v.pos.y; }
       if v.pos.z < mz { mz = v.pos.z; }
     }
-    math::vec3(mx, my, mz)
+    vec3(mx, my, mz)
   }
 }
 
 // Compute the maximum position across all vertices (component-wise).
-fn glb_pos_max(verts: vector<mesh::Vertex>) -> math::Vec3 {
+fn glb_pos_max(verts: vector<Vertex>) -> Vec3 {
   if verts.len() == 0 {
-    math::vec3(0.0, 0.0, 0.0)
+    vec3(0.0, 0.0, 0.0)
   } else {
     mx = verts[0].pos.x;
     my = verts[0].pos.y;
@@ -77,7 +77,7 @@ fn glb_pos_max(verts: vector<mesh::Vertex>) -> math::Vec3 {
       if v.pos.y > my { my = v.pos.y; }
       if v.pos.z > mz { mz = v.pos.z; }
     }
-    math::vec3(mx, my, mz)
+    vec3(mx, my, mz)
   }
 }
 
@@ -93,7 +93,7 @@ fn glb_pad4(n: integer) -> integer {
 //   [1]  NORMAL:     nv * 12 bytes  (VEC3, f32)
 //   [2]  TEXCOORD_0: nv *  8 bytes  (VEC2, f32)
 //   [3]  INDICES:    ni *  4 bytes  (SCALAR, u32)
-fn glb_json(m: mesh::Mesh, pos_min: math::Vec3, pos_max: math::Vec3) -> text {
+fn glb_json(m: Mesh, pos_min: Vec3, pos_max: Vec3) -> text {
   nv = m.vertices.len();
   nt = m.triangles.len();
   ni = nt * 3;
@@ -134,7 +134,7 @@ fn glb_json(m: mesh::Mesh, pos_min: math::Vec3, pos_max: math::Vec3) -> text {
 // Export a Mesh as a GLB 2.0 file.
 // The output file will contain POSITION, NORMAL, and TEXCOORD_0 vertex attributes
 // plus triangle indices.  Readable by Blender, three.js, gltf-validator.
-pub fn save_glb(m: mesh::Mesh, path: text) {
+pub fn save_glb(m: Mesh, path: text) {
   nv = m.vertices.len();
   nt = m.triangles.len();
   ni = nt * 3;
@@ -190,7 +190,7 @@ pub fn save_glb(m: mesh::Mesh, path: text) {
 // ─── Scene-level GLB export ───────────────────────────────────────────────────
 
 // Build a JSON material entry for glTF 2.0 pbrMetallicRoughness.
-fn glb_material_json(mat: scene::Material) -> text {
+fn glb_material_json(mat: Material) -> text {
   mn = mat.name;
   cr = mat.base_color_r as single;
   cg = mat.base_color_g as single;
@@ -208,10 +208,10 @@ fn glb_material_json(mat: scene::Material) -> text {
 }
 
 // True if a Mat4 is the identity matrix (within exact float equality).
-fn glb_is_identity_mat4(tr: math::Mat4) -> boolean {
+fn glb_is_identity_mat4(tr: Mat4) -> boolean {
   mm = tr.m;
   // `?? 0.0` is OOB-lint suppression — `Mat4.m` is always 16 floats by
-  // construction (see math::mat4_identity et al.); the fallback path is
+  // construction (see mat4_identity et al.); the fallback path is
   // unreachable.
   (mm[0] ?? 0.0) == 1.0 && (mm[1] ?? 0.0) == 0.0 && (mm[2] ?? 0.0) == 0.0 && (mm[3] ?? 0.0) == 0.0 &&
   (mm[4] ?? 0.0) == 0.0 && (mm[5] ?? 0.0) == 1.0 && (mm[6] ?? 0.0) == 0.0 && (mm[7] ?? 0.0) == 0.0 &&
@@ -221,7 +221,7 @@ fn glb_is_identity_mat4(tr: math::Mat4) -> boolean {
 
 // Build a glTF "matrix" JSON property from a column-major Mat4.
 // glTF 2.0 also uses column-major order, so emit elements directly.
-fn glb_mat4_json(tr: math::Mat4) -> text {
+fn glb_mat4_json(tr: Mat4) -> text {
   mm = tr.m;
   c0  = mm[0]  as single; c1  = mm[1]  as single; c2  = mm[2]  as single; c3  = mm[3]  as single;
   c4  = mm[4]  as single; c5  = mm[5]  as single; c6  = mm[6]  as single; c7  = mm[7]  as single;
@@ -234,16 +234,16 @@ fn glb_mat4_json(tr: math::Mat4) -> text {
   result
 }
 
-fn glb_light_node_json(lt: scene::Light, li: integer) -> text {
+fn glb_light_node_json(lt: Light, li: integer) -> text {
   lname = lt.name;
   result = "{{\"name\":\"{lname}\",\"extensions\":{{\"KHR_lights_punctual\":{{\"light\":{li}}}}}";
-  if lt.light_type == scene::Point {
+  if lt.light_type == Point {
     px = lt.position.x as single;
     py = lt.position.y as single;
     pz = lt.position.z as single;
     result += ",\"translation\":[{px:.6},{py:.6},{pz:.6}]";
   } else {
-    dir = math::normalize3(lt.direction);
+    dir = normalize3(lt.direction);
     dx = dir.x; dy = dir.y; dz = dir.z;
     dot_val = -dz;
     if dot_val < -0.9999 {
@@ -268,7 +268,7 @@ fn glb_light_node_json(lt: scene::Light, li: integer) -> text {
 // Build the full glTF JSON for a Scene.
 // BIN layout: for each mesh in order — pos, norm, uv, idx (no padding between meshes).
 // accessor base = mesh_idx * 4; bufferView base = mesh_idx * 4.
-fn glb_scene_json(sc: scene::Scene, bin_offset: vector<integer>) -> text {
+fn glb_scene_json(sc: Scene, bin_offset: vector<integer>) -> text {
   sn = sc.name;
 
   // Build per-mesh material index: for each mesh, the material used by the
@@ -307,9 +307,9 @@ fn glb_scene_json(sc: scene::Scene, bin_offset: vector<integer>) -> text {
       cg = lt.color_g as single;
       cb = lt.color_b as single;
       inten = lt.intensity as single;
-      if lt.light_type == scene::Point {
+      if lt.light_type == Point {
         result += "{{\"name\":\"{ltname}\",\"type\":\"point\",\"color\":[{cr:.6},{cg:.6},{cb:.6}],\"intensity\":{inten:.6}}}";
-      } else if lt.light_type == scene::Directional {
+      } else if lt.light_type == Directional {
         result += "{{\"name\":\"{ltname}\",\"type\":\"directional\",\"color\":[{cr:.6},{cg:.6},{cb:.6}],\"intensity\":{inten:.6}}}";
       } else {
         result += "{{\"name\":\"{ltname}\",\"type\":\"spot\",\"color\":[{cr:.6},{cg:.6},{cb:.6}],\"intensity\":{inten:.6}}}";
@@ -442,7 +442,7 @@ fn glb_scene_json(sc: scene::Scene, bin_offset: vector<integer>) -> text {
 
 // Export a Scene as a GLB 2.0 file.
 // All meshes are packed into one BIN chunk; materials use pbrMetallicRoughness.
-pub fn save_scene_glb(sc: scene::Scene, path: text) {
+pub fn save_scene_glb(sc: Scene, path: text) {
   // Compute per-mesh byte offsets in the BIN chunk.
   bin_offset = [];
   cur_offset = 0;
