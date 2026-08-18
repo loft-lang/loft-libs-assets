@@ -13,3 +13,6 @@ target/
 
 # per-package loft dependency lock (regenerated)
 */loft.lock
+
+# GLB files a test wrote (each test deletes its own; this catches an aborted run)
+*/tests/*.glb

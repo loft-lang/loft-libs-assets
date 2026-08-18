@@ -1,0 +1,268 @@
+// Copyright (c) 2026 Jurjen Stellingwerff
+// SPDX-License-Identifier: LGPL-3.0-or-later
+//
+// One test per non-obvious contract, and each one is that contract's
+// worked EXAMPLE.
+//
+// ⚠⚠ **The pair is the deliverable.**  A snippet in a doc comment rots
+// silently — nothing compiles it, so it goes stale at the first
+// signature change and the reader finds out.  A test nobody links to is
+// correct and invisible.  So every function below carries an
+// `// Example: @MSH-0NN` line pointing here, and every tag here is
+// reachable from the functions it demonstrates.
+//
+// ⚠ These are examples FIRST and assertions second: each is written the
+// way a caller building geometry would actually write it.  The other
+// test files pin that each function computes its own arithmetic; what
+// these pin is the shape of a CORRECT CALL.
+//
+// Why this library owes them: **the geometry is right and the BOOKKEEPING
+// is what a caller gets wrong.**  Every handle is a bare `integer`, every
+// buffer a bare `vector<single>`, every matrix a bare `vector<float>` —
+// so an index into the wrong list, a stride the consumer does not share,
+// a quad wound the other way and two matrices multiplied in the other
+// order are all well-typed calls that produce a picture, just not the
+// one that was asked for.
+use mesh3d;
+use scene;
+
+// Building a mesh by hand.
+//
+// ⚠⚠ **`add_vertex` hands back an INDEX and `add_triangle` takes three
+// of them.**  Both are bare `integer`s, so an index from another mesh, a
+// stale one, or a vertex COUNT used where an index was meant all
+// compile.  And the flatten does not fault on one — it SKIPS that
+// vertex, which leaves the triangle two-thirds emitted and shears every
+// float after it.
+// @MSH-001 — a vertex index is a bare integer, and a bad one shears the buffer
+fn test_building_a_triangle_by_index() {
+  bi_m = mesh::mesh("wedge");
+  bi_n = math::vec3(0.0, 0.0, 1.0);
+  bi_uv = math::vec2(0.0, 0.0);
+
+  // ⚠ Keep the returned index.  There is no `add_triangle(v0, v1, v2)`
+  // taking vertices — the mesh is index-addressed all the way down.
+  bi_a = bi_m.add_vertex(mesh::vertex(math::vec3(0.0, 0.0, 0.0), bi_n, bi_uv));
+  bi_b = bi_m.add_vertex(mesh::vertex(math::vec3(1.0, 0.0, 0.0), bi_n, bi_uv));
+  bi_c = bi_m.add_vertex(mesh::vertex(math::vec3(0.0, 1.0, 0.0), bi_n, bi_uv));
+  assert(bi_a == 0 && bi_b == 1 && bi_c == 2, "indices count from zero");
+  bi_m.add_triangle(bi_a, bi_b, bi_c);
+  assert(len(mesh::mesh_to_floats(bi_m)) == 18, "one triangle is 3 verts x stride 6");
+
+  // ⚠ Now the mistake, spelled the way it types: a fourth vertex was
+  // planned and never added, so the index is one past the end.
+  bi_m.add_triangle(bi_a, bi_b, 3);
+  bi_buf = mesh::mesh_to_floats(bi_m);
+
+  // Nothing raised.  The buffer is not short by one TRIANGLE (36 floats),
+  // it is short by one VERTEX — so it no longer divides into triangles
+  // and every vertex after the gap is read as part of the wrong one.
+  assert(bi_m.triangles.len() == 2, "the mesh still holds two triangles");
+  assert(len(bi_buf) == 30, "the buffer is {len(bi_buf)} floats, not 36");
+  assert(len(bi_buf) % 18 != 0, "and no longer divides into whole triangles");
+
+  // The check worth writing, because the library does not: an index is
+  // valid exactly while it is less than the vertex count at flatten time.
+  assert(!indices_in_range(bi_m), "the wedge has an out-of-range index");
+  bi_ok = mesh::plane("ground", 2.0, 2.0);
+  assert(indices_in_range(bi_ok), "a built-in primitive never has one");
+}
+
+// The guard the example above recommends, run before uploading a mesh a
+// caller assembled itself.
+fn indices_in_range(ir_m: const mesh::Mesh) -> boolean {
+  ir_n = ir_m.vertices.len();
+  for ir_t in ir_m.triangles {
+    if ir_t.a < 0 || ir_t.a >= ir_n { return false; }
+    if ir_t.b < 0 || ir_t.b >= ir_n { return false; }
+    if ir_t.c < 0 || ir_t.c >= ir_n { return false; }
+  }
+  true
+}
+
+// Handing a mesh to the GPU.
+//
+// ⚠⚠ **Two flatten doors, one return type, and the STRIDE is the
+// difference.**  Both answer `vector<single>`; `mesh_to_floats` packs
+// position+normal at stride 6 and `mesh_to_floats_uv` packs
+// position+normal+uv at stride 8.  The number has to travel to the
+// consumer by hand, and a buffer read at the wrong stride is a mesh that
+// draws, tumbling.
+// @MSH-002 — the stride is the contract, and the buffer expands triangles
+fn test_flattening_for_upload() {
+  fu_cube = mesh::cube();
+  assert(fu_cube.vertices.len() == 24 && fu_cube.triangles.len() == 12, "24 verts, 12 tris");
+
+  // ⚠ The buffer is sized by TRIANGLES, not vertices: each triangle
+  // emits its three vertices in full, so a shared vertex is written once
+  // per triangle that uses it.  There are no indices on the far side.
+  assert(len(mesh::mesh_to_floats(fu_cube)) == 12 * 3 * 6, "stride 6: {len(mesh::mesh_to_floats(fu_cube))}");
+  assert(len(mesh::mesh_to_floats_uv(fu_cube)) == 12 * 3 * 8, "stride 8: {len(mesh::mesh_to_floats_uv(fu_cube))}");
+
+  // ...so the buffer length says nothing about the vertex count — 24
+  // vertices became 36 emitted ones — and the two doors' answers are the
+  // same type and the same mesh at different widths.
+  assert(len(mesh::mesh_to_floats(fu_cube)) / 6 == 36, "36 emitted vertices from 24 stored");
+
+  // ⚠ And the degenerate case that reads as success: a mesh with
+  // vertices but no triangles flattens to an EMPTY buffer.  Uploading it
+  // is a legal call that draws nothing, and nothing says why.
+  fu_loose = mesh::mesh("no-faces");
+  fu_up = math::vec3(0.0, 1.0, 0.0);
+  for _ in 0..3 {
+    fu_loose.add_vertex(mesh::vertex(math::vec3(0.0, 0.0, 0.0), fu_up, math::vec2(0.0, 0.0)));
+  }
+  assert(fu_loose.vertices.len() == 3, "three vertices are stored");
+  assert(len(mesh::mesh_to_floats(fu_loose)) == 0, "and none of them reach the buffer");
+
+  // The first vertex of the first triangle, read at its own stride — the
+  // check that a consumer's stride and this one agree.
+  fu_plane = mesh::plane("ground", 2.0, 2.0);
+  fu_buf = mesh::mesh_to_floats_uv(fu_plane);
+  assert(len(fu_buf) == 2 * 3 * 8, "plane at stride 8");
+  assert(f_at(fu_buf, 3) == 0.0 && f_at(fu_buf, 4) == 1.0 && f_at(fu_buf, 5) == 0.0,
+         "floats 3..5 are the normal, and it points up");
+}
+
+// Read one float out of a flat buffer.  The buffer is `vector<single>`,
+// so a `?? ` default has to be a `single` too.
+fn f_at(fa_buf: const vector<single>, fa_i: integer) -> float {
+  (fa_buf[fa_i] ?? (0.0 as single)) as float
+}
+
+// Which way does a face point?
+//
+// ⚠⚠ **A mesh makes that claim TWICE — once as the stored vertex normal
+// and once as the winding order — and nothing checks that the two
+// agree.**  `add_quad(i0, i1, i2, i3)` emits (i0,i1,i2) and (i0,i2,i3),
+// so the corner order decides the winding; the normal is whatever the
+// caller put in the vertex.  Get them opposite and the lighting is right
+// while the face is invisible under back-face culling.
+// @MSH-003 — winding and the stored normal are two independent claims
+fn test_which_way_a_face_points() {
+  // `plane` passes its corners in reverse (v0, v3, v2, v1) precisely so
+  // the winding agrees with the +y normal it stores.
+  wf_p = mesh::plane("ground", 2.0, 3.0);
+  wf_t = wf_p.triangles[0];
+  assert(wf_t.a == 0 && wf_t.b == 3 && wf_t.c == 2, "the quad is wound backwards on purpose");
+  assert(geometric_normal_y(wf_p, 0) > 0.0, "the winding says up");
+  assert((wf_p.vertices[0].normal.y ?? 0.0) == 1.0, "and so does the stored normal");
+
+  // ⚠ The same four corners in the order they read naturally:
+  wf_r = mesh::mesh("flipped");
+  wf_up = math::vec3(0.0, 1.0, 0.0);
+  wf_0 = wf_r.add_vertex(mesh::vertex(math::vec3(-1.0, 0.0, -1.5), wf_up, math::vec2(0.0, 0.0)));
+  wf_1 = wf_r.add_vertex(mesh::vertex(math::vec3( 1.0, 0.0, -1.5), wf_up, math::vec2(1.0, 0.0)));
+  wf_2 = wf_r.add_vertex(mesh::vertex(math::vec3( 1.0, 0.0,  1.5), wf_up, math::vec2(1.0, 1.0)));
+  wf_3 = wf_r.add_vertex(mesh::vertex(math::vec3(-1.0, 0.0,  1.5), wf_up, math::vec2(0.0, 1.0)));
+  wf_r.add_quad(wf_0, wf_1, wf_2, wf_3);
+
+  // Same corners, same stored normal — and the face now points DOWN.
+  assert(geometric_normal_y(wf_r, 0) < 0.0, "the winding says down");
+  assert((wf_r.vertices[0].normal.y ?? 0.0) == 1.0, "while the stored normal still says up");
+
+  // ...and the two meshes are indistinguishable by everything the API
+  // reports: same counts, same positions, same normals.
+  assert(wf_r.vertices.len() == wf_p.vertices.len(), "same vertex count");
+  assert(wf_r.triangles.len() == wf_p.triangles.len(), "same triangle count");
+}
+
+// The winding of triangle `gn_i`, as its geometric normal's y component.
+// Positive means counter-clockwise seen from +y.
+fn geometric_normal_y(gn_m: const mesh::Mesh, gn_i: integer) -> float {
+  gn_t = gn_m.triangles[gn_i];
+  gn_a = gn_m.vertices[gn_t.a].pos;
+  gn_b = gn_m.vertices[gn_t.b].pos;
+  gn_c = gn_m.vertices[gn_t.c].pos;
+  math::cross(math::sub3(gn_b, gn_a), math::sub3(gn_c, gn_a)).y
+}
+
+// Composing transforms.
+//
+// ⚠⚠ **`mat4_mul(A, B)` applies B FIRST**, and the two orders are both
+// well-typed calls that put the object in different places.  The storage
+// is COLUMN-major too, so a translation lives at `m[12..14]`, not at
+// `m[3]`, `m[7]`, `m[11]` — a matrix copied in from a row-major source
+// transposes silently.
+// @MSH-004 — the right-hand matrix is applied first, and the layout is column-major
+fn test_composing_a_transform() {
+  ct_move = math::mat4_translate(10.0, 0.0, 0.0);
+  ct_spin = math::mat4_rotate_y(1.5707963267948966);        // a quarter turn
+  ct_p = math::vec3(1.0, 0.0, 0.0);
+
+  // "spin AFTER move" — the point is carried out to x=11 and swung round
+  // to the +z axis.
+  ct_spin_last = math::mat4_transform(math::mat4_mul(ct_spin, ct_move), ct_p);
+  assert(about(ct_spin_last.x, 0.0) && about(ct_spin_last.z, 11.0),
+         "spin-after-move lands at ({ct_spin_last.x}, {ct_spin_last.y}, {ct_spin_last.z})");
+
+  // ⚠ Swap the arguments and the object is somewhere else entirely: it
+  // is swung first, to z=1, and only then carried out along x.
+  ct_move_last = math::mat4_transform(math::mat4_mul(ct_move, ct_spin), ct_p);
+  assert(about(ct_move_last.x, 10.0) && about(ct_move_last.z, 1.0),
+         "move-after-spin lands at ({ct_move_last.x}, {ct_move_last.y}, {ct_move_last.z})");
+
+  // ⚠ Column-major: the translation column is the LAST four floats.
+  assert((ct_move.m[12] ?? 0.0) == 10.0, "tx is m[12]");
+  assert((ct_move.m[3] ?? 0.0) == 0.0, "not m[3] — that slot is a column-0 element");
+
+  // `mat4_trs` is the same composition in one call, for the common case.
+  ct_trs = math::mat4_trs(10.0, 0.0, 0.0, 1.5707963267948966, 1.0, 1.0, 1.0);
+  ct_via_trs = math::mat4_transform(ct_trs, ct_p);
+  assert(about(ct_via_trs.x, 10.0) && about(ct_via_trs.z, 1.0),
+         "trs scales, spins, then moves — the move-after-spin order");
+}
+
+fn about(ab_a: float, ab_b: float) -> boolean {
+  ab_d = ab_a - ab_b;
+  (if ab_d < 0.0 { 0.0 - ab_d } else { ab_d }) < 0.000001
+}
+
+// Degenerate input.
+//
+// ⚠⚠ **Nothing here reports a degenerate case; it answers a zero.**
+// `normalize3` of a zero-length vector is the zero vector (not null, not
+// a fault), and every matrix builder that divides guards with `?? 0.0`.
+// So a camera whose eye equals its target builds a matrix that collapses
+// the whole world onto the origin, and the first sign is a black frame.
+// @MSH-005 — a degenerate input answers zero, never an error
+fn test_a_degenerate_camera() {
+  di_zero = math::normalize3(math::vec3(0.0, 0.0, 0.0));
+  assert(math::length3(di_zero) == 0.0, "normalizing nothing yields nothing");
+  assert(di_zero.x == 0.0 && di_zero.y == 0.0 && di_zero.z == 0.0, "a zero vector, not a unit one");
+
+  // A healthy camera keeps distances: something 5 in front of the eye
+  // sits 5 down the view's -z.
+  di_eye = math::vec3(0.0, 0.0, 5.0);
+  di_at = math::vec3(0.0, 0.0, 0.0);
+  di_up = math::vec3(0.0, 1.0, 0.0);
+  di_good = math::mat4_look_at(di_eye, di_at, di_up);
+  di_seen = math::mat4_transform(di_good, di_at);
+  assert(about(di_seen.z, -5.0), "the target sits 5 down -z, at {di_seen.z}");
+
+  // ⚠ Eye and target the same — one line in a controller that forgot to
+  // offset the eye.  `look_at` normalizes a zero direction, and every
+  // basis vector comes out zero.
+  di_bad = math::mat4_look_at(di_eye, di_eye, di_up);
+  di_lost = math::mat4_transform(di_bad, math::vec3(7.0, 8.0, 9.0));
+  assert(di_lost.x == 0.0 && di_lost.y == 0.0 && di_lost.z == 0.0,
+         "every point maps to the origin: ({di_lost.x}, {di_lost.y}, {di_lost.z})");
+
+  // The guard worth writing, since the library will not:
+  assert(!can_look(di_eye, di_eye), "eye == target is not a camera");
+  assert(can_look(di_eye, di_at), "a real one is");
+}
+
+// The check the example above recommends, before building a view matrix.
+fn can_look(cl_eye: const math::Vec3, cl_at: const math::Vec3) -> boolean {
+  math::length3(math::sub3(cl_at, cl_eye)) > 0.0
+}
+
+fn main() {
+  test_building_a_triangle_by_index();
+  test_flattening_for_upload();
+  test_which_way_a_face_points();
+  test_composing_a_transform();
+  test_a_degenerate_camera();
+  println("mesh3d worked examples passed");
+}

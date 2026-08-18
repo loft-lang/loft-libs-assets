@@ -1,0 +1,230 @@
+// Copyright (c) 2026 Jurjen Stellingwerff
+// SPDX-License-Identifier: LGPL-3.0-or-later
+//
+// One test per non-obvious contract, and each one is that contract's
+// worked EXAMPLE.
+//
+// ⚠⚠ **The pair is the deliverable.**  A snippet in a doc comment rots
+// silently — nothing compiles it, so it goes stale at the first
+// signature change and the reader finds out.  A test nobody links to is
+// correct and invisible.  So every function below carries an
+// `// Example: @GLB-0NN` line pointing here, and every tag here is
+// reachable from the functions it demonstrates.
+//
+// ⚠ These are examples FIRST and assertions second.  `glb.loft` and
+// `scene_glb.loft` already pin the byte layout the writer produces; what
+// these pin is the shape of a CORRECT CALL.
+//
+// Why this library owes them: **its whole public surface is two
+// functions that return NOTHING.**  `save_glb(mesh, path)` and
+// `save_scene_glb(scene, path)` are statements — there is no success
+// value, no error, no null.  The only evidence a save happened is the
+// file, and the writer is happy to produce a well-formed GLB container
+// holding a glTF no reader will accept.
+use mesh3d;
+use glb;
+
+// A three-vertex mesh, wound counter-clockwise, used by the examples below.
+fn one_triangle(ot_name: text) -> Mesh {
+  ot_m = mesh::mesh(ot_name);
+  ot_n = math::vec3(0.0, 0.0, 1.0);
+  ot_uv = math::vec2(0.0, 0.0);
+  ot_m.add_vertex(mesh::vertex(math::vec3(0.0, 0.0, 0.0), ot_n, ot_uv));
+  ot_m.add_vertex(mesh::vertex(math::vec3(1.0, 0.0, 0.0), ot_n, ot_uv));
+  ot_m.add_vertex(mesh::vertex(math::vec3(0.0, 1.0, 0.0), ot_n, ot_uv));
+  ot_m
+}
+
+// Read the glTF JSON chunk back out of a written GLB.
+fn glb_json_of(gj_path: text) -> text {
+  gj_f = file(gj_path);
+  gj_f#format = LittleEndian;
+  gj_f#read(4) as i32;                   // magic
+  gj_f#read(4) as i32;                   // version
+  gj_f#read(4) as i32;                   // total length
+  gj_len = gj_f#read(4) as i32;          // JSON chunk data length
+  gj_f#read(4) as i32;                   // chunk type 'JSON'
+  gj_f#read(gj_len) as text
+}
+
+// Saving a mesh.
+//
+// ⚠⚠ **`save_glb` answers nothing at all.**  Not a boolean, not a null —
+// the call is a statement.  So a save is not something a program can
+// check; it is something a program has to go and LOOK at afterwards.
+// @GLB-001 — the save has no return value, so the file is the only evidence
+fn test_saving_a_mesh_and_checking_it() {
+  sm_m = one_triangle("wedge");
+  sm_m.add_triangle(0, 1, 2);
+
+  // The whole call site.  Nothing is bound, because there is nothing to bind.
+  glb::save_glb(sm_m, "wex_glb_a.glb");
+
+  // ⚠ The check a caller has to write, because the library cannot say it:
+  // the file exists, is non-empty, and starts with the GLB magic.
+  assert(file("wex_glb_a.glb").size > 0, "a file appeared");
+  {sm_f = file("wex_glb_a.glb");
+   sm_f#format = LittleEndian;
+   assert(sm_f#read(4) as i32 == 0x46546C67, "magic is 'glTF'");
+   assert(sm_f#read(4) as i32 == 2, "GLB version 2");
+   assert((sm_f#read(4) as i32) as integer == file("wex_glb_a.glb").size,
+          "the header's total length is the real file size");
+  }
+
+  // ⚠ And a save TRUNCATES rather than appends, so writing the same path
+  // twice replaces it — the size is the answer, not double it.
+  sm_once = file("wex_glb_a.glb").size;
+  glb::save_glb(sm_m, "wex_glb_a.glb");
+  assert(file("wex_glb_a.glb").size == sm_once,
+         "a second save replaced the file ({file(\"wex_glb_a.glb\").size} vs {sm_once})");
+  delete("wex_glb_a.glb");
+}
+
+// Which door to save through.
+//
+// ⚠⚠ **`save_glb` writes ONE mesh and nothing else.**  No material, no
+// node transform, no camera, no light — a scene handed in one mesh at a
+// time arrives grey, at the origin, unlit, and nothing reports the loss.
+// `save_scene_glb` is the door that carries them.
+// @GLB-002 — the mesh door drops everything that is not geometry
+fn test_choosing_the_save_door() {
+  cd_m = one_triangle("solo");
+  cd_m.add_triangle(0, 1, 2);
+
+  // The mesh door, on a mesh that is part of a richer scene:
+  glb::save_glb(cd_m, "wex_glb_b.glb");
+  cd_j1 = glb_json_of("wex_glb_b.glb");
+  assert(cd_j1.find("\"meshes\"") != null, "the geometry is there");
+  assert(cd_j1.find("\"materials\"") == null, "and no material");
+  assert(cd_j1.find("\"matrix\"") == null, "no node transform");
+  assert(cd_j1.find("\"cameras\"") == null, "no camera");
+  delete("wex_glb_b.glb");
+
+  // ⚠ The same mesh through the scene door, with what it belongs to:
+  cd_s = scene::scene("lit");
+  cd_s.add_mesh(cd_m);
+  cd_mat = cd_s.add_material(scene::material_color("red", 1.0, 0.0, 0.0));
+  cd_s.add_node(scene::node_at("moved", 0, cd_mat, math::mat4_translate(2.0, 0.0, 0.0)));
+  glb::save_scene_glb(cd_s, "wex_glb_c.glb");
+  cd_j2 = glb_json_of("wex_glb_c.glb");
+  assert(cd_j2.find("\"materials\"") != null, "the material travelled");
+  assert(cd_j2.find("\"matrix\"") != null, "and so did the transform");
+  delete("wex_glb_c.glb");
+
+  // ⚠ A node's transform is compared to the identity by EXACT float
+  // equality, so a full-turn rotation — mathematically the identity —
+  // still emits a matrix.  Harmless, but it means "no matrix in the
+  // JSON" is a statement about the bits, not about the geometry.
+  cd_spun = scene::scene("spun");
+  cd_spun.add_mesh(cd_m);
+  cd_smat = cd_spun.add_material(scene::material("m"));
+  cd_spun.add_node(scene::node_at("turned", 0, cd_smat,
+                                  math::mat4_rotate_y(6.283185307179586)));
+  glb::save_scene_glb(cd_spun, "wex_glb_d.glb");
+  assert(glb_json_of("wex_glb_d.glb").find("\"matrix\"") != null,
+         "a 360-degree turn is not bit-identical to the identity");
+  delete("wex_glb_d.glb");
+}
+
+// What a broken mesh does on the way out.
+//
+// ⚠⚠ **A triangle index is copied into the file unchecked.**  The same
+// out-of-range index that `mesh3d`'s `mesh_to_floats` silently SKIPS is
+// written verbatim here — so the two export paths fail differently for
+// one defect: the GL buffer comes out short and sheared, while the GLB
+// comes out structurally perfect and semantically invalid, an index of 5
+// against an accessor that declares 3 vertices.
+// @GLB-003 — an out-of-range index is written straight into the file
+fn test_a_bad_index_reaches_the_file() {
+  bi_m = one_triangle("bad");
+  bi_m.add_triangle(0, 1, 5);           // there is no vertex 5
+
+  glb::save_glb(bi_m, "wex_glb_e.glb");
+  assert(file("wex_glb_e.glb").size > 0, "the file is written anyway");
+
+  // The JSON still declares three vertices...
+  assert(glb_json_of("wex_glb_e.glb").find("\"count\":3") != null,
+         "POSITION accessor count is 3");
+
+  // ...and the BIN chunk carries the index 5 next to them.  BIN layout is
+  // pos(3*12) + norm(3*12) + uv(3*8) + idx(3*4) = 108 bytes.
+  {bi_f = file("wex_glb_e.glb");
+   bi_f#format = LittleEndian;
+   bi_f#read(4) as i32; bi_f#read(4) as i32; bi_f#read(4) as i32;
+   bi_jlen = bi_f#read(4) as i32;
+   bi_f#read(4) as i32;
+   bi_f#next = (20 + bi_jlen) as integer;
+   assert(bi_f#read(4) as i32 == 108, "BIN chunk is the expected 108 bytes");
+   bi_f#read(4) as i32;                              // chunk type 'BIN\0'
+   bi_f#next = (20 + bi_jlen + 8 + 36 + 36 + 24) as integer;   // past pos, norm, uv
+   assert(bi_f#read(4) as i32 == 0, "index 0");
+   assert(bi_f#read(4) as i32 == 1, "index 1");
+   assert(bi_f#read(4) as i32 == 5, "and index 5, which no vertex answers to");
+  }
+  delete("wex_glb_e.glb");
+
+  // ⚠ So validate before saving.  Nothing downstream will: the writer
+  // does not look, and the first report is a validator or a renderer.
+  assert(!exportable(bi_m), "the broken mesh is not exportable");
+  bi_ok = one_triangle("good");
+  bi_ok.add_triangle(0, 1, 2);
+  assert(exportable(bi_ok), "a whole one is");
+}
+
+// The pre-save check the examples recommend: a mesh reaches a reader
+// intact only if it has geometry at all and every index names a vertex.
+fn exportable(ex_m: const Mesh) -> boolean {
+  ex_n = ex_m.vertices.len();
+  if ex_n == 0 || ex_m.triangles.len() == 0 { return false; }
+  for ex_t in ex_m.triangles {
+    if ex_t.a < 0 || ex_t.a >= ex_n { return false; }
+    if ex_t.b < 0 || ex_t.b >= ex_n { return false; }
+    if ex_t.c < 0 || ex_t.c >= ex_n { return false; }
+  }
+  true
+}
+
+// Saving nothing.
+//
+// ⚠⚠ **An empty mesh writes a complete, well-formed GLB file that is not
+// a valid glTF.**  The container is right — magic, version, both chunk
+// headers, a total length that matches the file — and the accessors it
+// declares have `"count":0`, which glTF 2.0 forbids.  The save reports
+// success the only way it can: by not saying anything.
+// @GLB-004 — an empty mesh writes a valid container around an invalid glTF
+fn test_saving_an_empty_mesh() {
+  sn_m = mesh::mesh("nothing");         // no vertices, no triangles
+  glb::save_glb(sn_m, "wex_glb_f.glb");
+
+  // The container is impeccable:
+  assert(file("wex_glb_f.glb").size > 0, "a file was written");
+  {sn_f = file("wex_glb_f.glb");
+   sn_f#format = LittleEndian;
+   assert(sn_f#read(4) as i32 == 0x46546C67, "magic is 'glTF'");
+   sn_f#read(4) as i32;
+   assert((sn_f#read(4) as i32) as integer == file("wex_glb_f.glb").size,
+          "total length matches");
+   sn_jlen = sn_f#read(4) as i32;
+   assert(sn_jlen % 4 == 0, "the JSON chunk is padded to 4 bytes");
+   sn_f#read(4) as i32;
+   sn_f#next = (20 + sn_jlen) as integer;
+   assert(sn_f#read(4) as i32 == 0, "and the BIN chunk is empty");
+  }
+
+  // ⚠ ...and the glTF inside it is not loadable: an accessor may not
+  // declare zero elements.
+  assert(glb_json_of("wex_glb_f.glb").find("\"count\":0") != null,
+         "the accessors declare count 0");
+  delete("wex_glb_f.glb");
+
+  // The same guard as @GLB-003 catches it, which is why it tests both:
+  assert(!exportable(sn_m), "an empty mesh is not exportable");
+}
+
+fn main() {
+  test_saving_a_mesh_and_checking_it();
+  test_choosing_the_save_door();
+  test_a_bad_index_reaches_the_file();
+  test_saving_an_empty_mesh();
+  println("glb worked examples passed");
+}

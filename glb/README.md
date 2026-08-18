@@ -26,6 +26,20 @@ positions + normals + UVs, indexed triangles, pbrMetallicRoughness
 materials, directional + point lights via the glTF light extension
 convention.
 
+## The four contracts a signature does not carry
+
+The whole public surface is two functions that return **nothing** — `save_glb(mesh, path)` and
+`save_scene_glb(scene, path)` are statements, with no success value, no error and no null.  The
+only evidence a save happened is the file, and the writer will happily produce a well-formed GLB
+container around a glTF no reader will accept.  Each row links to a test that runs in CI.
+
+| contract | worked example |
+|---|---|
+| **The save answers nothing,** so the file is the only evidence: check it exists, is non-empty, and carries the `glTF` magic whose total-length field matches the real size.  A save truncates first, so writing one path twice replaces rather than appends. | [`@GLB-001`](tests/worked-examples.loft) |
+| **`save_glb` writes one mesh and nothing else** — no material, no node transform, no camera, no light.  `save_scene_glb` is the door that carries them.  (Node transforms are compared to the identity by *exact* float equality, so a full-turn rotation still emits a `matrix`.) | [`@GLB-002`](tests/worked-examples.loft) |
+| **A triangle index is copied into the file unchecked.**  The same out-of-range index that `mesh3d`'s `mesh_to_floats` silently skips is written verbatim here, so one defect fails two ways: a sheared GL buffer, or a structurally perfect GLB whose index 5 stands against an accessor declaring 3 vertices. | [`@GLB-003`](tests/worked-examples.loft) |
+| **An empty mesh writes a valid container around an invalid glTF** — right magic, right chunk headers, matching total length, and accessors declaring `"count":0`, which glTF 2.0 forbids.  Validate before saving; nothing downstream will. | [`@GLB-004`](tests/worked-examples.loft) |
+
 ## Dependencies
 
 - [`mesh3d`](https://github.com/loft-lang/loft-libs-assets/tree/main/mesh3d)

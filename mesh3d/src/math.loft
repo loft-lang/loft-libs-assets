@@ -92,6 +92,7 @@ pub fn length3(lv: const Vec3) -> float {
 //
 // ⚠ A ZERO vector answers ZERO rather than a NaN, so a degenerate triangle
 // poisons one normal instead of the whole mesh.
+// Example: @MSH-005
 pub fn normalize3(nv: const Vec3) -> Vec3 {
   nl = length3(nv);
   // `/ nl ?? 0.0` yields a zero vector for a zero-length input — same
@@ -138,6 +139,7 @@ pub fn mat4_scale(sx: float, sy: float, sz: float) -> Mat4 {
 }
 
 // Multiply two 4x4 matrices (A * B). Result = A applied after B.
+// Example: @MSH-004
 pub fn mat4_mul(ma: const Mat4, mb: const Mat4) -> Mat4 {
   mul_r = Mat4 { m: [
     0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
@@ -156,6 +158,7 @@ pub fn mat4_mul(ma: const Mat4, mb: const Mat4) -> Mat4 {
 }
 
 // Transform a Vec3 by a Mat4 (as a point, w=1).
+// Example: @MSH-004
 pub fn mat4_transform(tm: const Mat4, tv: const Vec3) -> Vec3 {
   Vec3 {
     x: tm.m[0] * tv.x + tm.m[4] * tv.y + tm.m[8]  * tv.z + tm.m[12],
@@ -177,6 +180,7 @@ pub fn mat4_perspective(fov_y: float, aspect: float, near: float, far: float) ->
 }
 
 // View matrix looking from eye towards target with up direction.
+// Example: @MSH-005
 pub fn mat4_look_at(eye: const Vec3, target: const Vec3, up: const Vec3) -> Mat4 {
   la_f = normalize3(sub3(target, eye));
   la_s = normalize3(cross(la_f, up));
@@ -225,6 +229,7 @@ pub fn mat4_ortho(left: float, right: float, bottom: float, top: float, near: fl
 }
 
 // Combined translate + rotate_y + scale in one call.
+// Example: @MSH-004
 pub fn mat4_trs(tx: float, ty: float, tz: float, ry: float, sx: float, sy: float, sz: float) -> Mat4 {
   trs_c = cos(ry);
   trs_s = sin(ry);

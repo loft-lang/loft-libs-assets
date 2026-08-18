@@ -134,6 +134,9 @@ fn glb_json(m: Mesh, pos_min: Vec3, pos_max: Vec3) -> text {
 // Export a Mesh as a GLB 2.0 file.
 // The output file will contain POSITION, NORMAL, and TEXCOORD_0 vertex attributes
 // plus triangle indices.  Readable by Blender, three.js, gltf-validator.
+// Example: @GLB-001
+// Example: @GLB-003
+// Example: @GLB-004
 pub fn save_glb(m: Mesh, path: text) {
   nv = m.vertices.len();
   nt = m.triangles.len();
@@ -442,6 +445,7 @@ fn glb_scene_json(sc: Scene, bin_offset: vector<integer>) -> text {
 
 // Export a Scene as a GLB 2.0 file.
 // All meshes are packed into one BIN chunk; materials use pbrMetallicRoughness.
+// Example: @GLB-002
 pub fn save_scene_glb(sc: Scene, path: text) {
   // Compute per-mesh byte offsets in the BIN chunk.
   bin_offset = [];
