@@ -28,8 +28,8 @@ forced consumers to install a GPU stack to process a PNG.
 
 | Subdir | Package | Status |
 |---|---|---|
-| [`mesh3d/`](mesh3d/) | `mesh3d` — 3D geometry primitives (Vec/Mat, Mesh, Scene) | v0.1.0 (shipped 2026-05-31) |
-| [`glb/`](glb/) | `glb` — glTF 2.0 binary writer (depends on mesh3d) | v0.1.0 (shipped 2026-05-31) |
+| [`mesh3d/`](mesh3d/) | `mesh3d` — 3D geometry primitives (Vec/Mat, Mesh, Scene) | v0.1.1 |
+| [`glb/`](glb/) | `glb` — glTF 2.0 binary writer (depends on mesh3d) | v0.1.2 |
 | `imaging/` | `imaging` — PNG load / save + pixel manipulation | currently shipped in [`loft-libs-graphics`](https://github.com/loft-lang/loft-libs-graphics); migrates here at next major-version boundary |
 
 ## Installing a package

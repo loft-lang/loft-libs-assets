@@ -36,6 +36,7 @@ pub fn mesh(mn: text) -> Mesh {
 }
 
 // Add a vertex to the mesh and return its index.
+// Example: @MSH-001
 pub fn add_vertex(self: Mesh, av: Vertex) -> integer {
   idx = self.vertices.len();
   self.vertices += [av];
@@ -43,12 +44,14 @@ pub fn add_vertex(self: Mesh, av: Vertex) -> integer {
 }
 
 // Add a triangle by vertex indices.
+// Example: @MSH-001
 pub fn add_triangle(self: Mesh, ti0: integer, ti1: integer, ti2: integer) {
   self.triangles += [Triangle { a: ti0, b: ti1, c: ti2 }];
 }
 
 // Build a simple quad (two triangles) from 4 vertices.
 // Vertices should be in counter-clockwise order.
+// Example: @MSH-003
 pub fn add_quad(self: Mesh, qi0: integer, qi1: integer, qi2: integer, qi3: integer) {
   self.add_triangle(qi0, qi1, qi2);
   self.add_triangle(qi0, qi2, qi3);
@@ -101,6 +104,7 @@ pub fn cube() -> Mesh {
 
 // Create a flat horizontal plane centered at origin.
 // pw = width (x-axis), pd = depth (z-axis); normal = (0, 1, 0).
+// Example: @MSH-003
 pub fn plane(pn: text, pw: float, pd: float) -> Mesh {
   pm = mesh(pn);
   hw = pw / 2.0;
@@ -158,6 +162,7 @@ pub fn sphere(sn: text, sr: float, ss: integer, st: integer) -> Mesh {
 // Flatten a mesh to a vector<single> with UV coords for GL upload.
 // Expands triangles: for each triangle, emits 3 vertices with pos+normal+uv (stride=8).
 // Returns the flat buffer suitable for gl_upload_vertices(data, 8).
+// Example: @MSH-002
 pub fn mesh_to_floats_uv(mu: const Mesh) -> vector<single> {
   mu_buf: vector<single> = [];
   for mu_tri in mu.triangles {
@@ -174,6 +179,7 @@ pub fn mesh_to_floats_uv(mu: const Mesh) -> vector<single> {
 }
 
 // Flatten a mesh to a vector<single> for GL upload.
+// Example: @MSH-002
 pub fn mesh_to_floats(mf: const Mesh) -> vector<single> {
   mf_buf: vector<single> = [];
   for mf_tri in mf.triangles {

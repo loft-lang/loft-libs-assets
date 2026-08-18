@@ -12,6 +12,7 @@ fn test_directional_light_exports() {
   dls.add_light(scene::directional_light("sun", 1.0, 1.0, 1.0, 1.0, math::vec3(0.3, -1.0, 0.2)));
   glb::save_scene_glb(dls, "test_dir_light.glb");
   assert(file("test_dir_light.glb").size > 0, "directional-light scene exported");
+  delete("test_dir_light.glb");
 }
 
 fn test_point_light_exports() {
@@ -20,4 +21,5 @@ fn test_point_light_exports() {
   pls.add_light(scene::point_light("bulb", 1.0, 0.8, 0.6, 2.0, math::vec3(1.0, 2.0, 3.0)));
   glb::save_scene_glb(pls, "test_point_light.glb");
   assert(file("test_point_light.glb").size > 0, "point-light scene exported");
+  delete("test_point_light.glb");
 }
