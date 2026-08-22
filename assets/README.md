@@ -15,6 +15,13 @@ struct definitions in `src/assets.loft` **are** the file layout, so a browser re
 pack by HTTP range fetches the pages one lookup touches and nothing else — with no
 server-side code at all.
 
+> **Needs a loft newer than v2026.8.0.** Reading a pack back exercises the store
+> allocator's linear scan, and a compaction-on-load defect there made `store_load`
+> never return — no diagnostic, no bound, on a call that only reads a file. The fix
+> is on `loft-lang/loft@main` and is not in the v2026.8.0 release, so on that release
+> a pack read **hangs**. Until the next loft release carries it, run with
+> `LOFT_NO_COMPACT_ON_LOAD=1`, which skips the rebuild the defect lives in.
+
 ```loft
 use assets;
 
