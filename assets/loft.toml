@@ -2,6 +2,8 @@
 name    = "assets"
 version = "0.1.0"
 loft    = ">=0.8"
+description = "A game's content pack that IS a loft store — art, audio and the scenes that place them, range-read off a static file server.  No codec, no parse step, no server-side code."
+categories  = ["game", "asset-format"]
 
 api_compatible_with  = "0.1.0"   # oldest own release this is a drop-in for
 data_compatible_with = "0.1.0"   # oldest own release whose stored data this reads
