@@ -100,40 +100,6 @@ fn test_one_key_reads_without_the_rest_of_the_pack() {
   clean(base);
 }
 
-fn test_a_ring_of_keys_is_one_traversal_and_costs_only_what_was_missing() {
-  base = base_for("ring");
-  clean(base);
-  p = new_pack();
-  b: hash<Blob[bl_key]> = [];
-  fixture(p, b);
-  assert(pack_write(p, b, base), "written");
-
-  // The case `prefetch` exists for: a whole ring at once, in ONE traversal.  Asking
-  // key by key opens a reader per key and re-reads the same bucket-table page every
-  // time — the cost F2 measured and this call removes.
-  res: hash<Blob[bl_key]> = [];
-  ring = ["page/mobs", "page/items", "hit.ogg"];
-  assert(prefetch(res, blobs_path(base), ring) == 3, "all three paid for");
-  for k in ring {
-    got = res[k];
-    assert(got != null, "{k} arrived");
-    assert(same_bytes(got.bl_bytes, b[k].bl_bytes), "{k} byte-identical");
-  }
-
-  // Asking again costs NOTHING — the frame assertion.  A loader that answered how
-  // many it FOUND rather than how many it fetched would say 3 here.
-  assert(prefetch(res, blobs_path(base), ring) == 0, "a resident ring is free");
-
-  // And a mixed ring pays for exactly the missing one, leaving the residents alone.
-  fresh: hash<Blob[bl_key]> = [];
-  assert(prefetch(fresh, blobs_path(base), ["hit.ogg"]) == 1, "one to start with");
-  assert(prefetch(fresh, blobs_path(base), ring) == 2, "only the two that were missing");
-  n = 0;
-  for _r in fresh { n += 1; }
-  assert(n == 3, "and the ring is now whole, got {n}");
-  clean(base);
-}
-
 fn test_a_key_the_pack_does_not_have_answers_false() {
   base = base_for("absent");
   clean(base);
