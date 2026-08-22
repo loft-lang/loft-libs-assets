@@ -79,6 +79,7 @@ well-typed call that does something other than what was meant.
 | **A pack is two files, and `pack_write` / `pack_read` name them.** Handing the base path straight to `store_load` reads nothing, because the base is not a file — use `meta_path` / `blobs_path` to name a half. | [`tests/pack.loft`](tests/pack.loft) |
 | **`+=` on a `&hash` parameter retypes it** to a `vector<Blob>` and the program stops compiling. `blob_put` is the keyed insert that does not. | [`tests/pack.loft`](tests/pack.loft) |
 | **`prefetch` answers what it FETCHED, not what is resident.** `0` means everything asked for was already there — which is what a frame asserts — and never that the read failed. A key the pack does not have is skipped, not invented. | [`tests/pack.loft`](tests/pack.loft) |
+| **Ask for the whole ring in one call.** `prefetch` takes a vector because it does ONE traversal; a loop over single-key reads opens a reader per key and re-fetches the same bucket-table page every time. Measured on a 5.1 MB pack, twenty keys: **81 requests / 5 308 416 bytes** key-by-key against **24 requests / 1 572 864 bytes** batched — the loop reads more than the whole pack to deliver 1.25 MB of it. | [`tests/pack.loft`](tests/pack.loft) |
 | **`keys_near` is a boundary call, never a frame call.** A range read is a round trip and a frame is 16 ms, so a frame that DISCOVERS it needs an asset stutters. Ask at a load or a level edge; a negative radius means the whole scene. A light contributes no key, because it draws nothing. | [`tests/scene.loft`](tests/scene.loft) |
 | **The layout IS the format.** A field that sits four bytes further along on one target reads a *neighbour's* value on the other, silently, and the file looks corrupt rather than the layout looking wrong. Compare `layout_fingerprint()` across targets before reading a pack built elsewhere. | [`tests/layout.loft`](tests/layout.loft) |
 
@@ -95,7 +96,9 @@ _ = prefetch(res, blobs_path(base), want);
 ```
 
 The server needs to honour `Range` and nothing else — no code, no API, a directory of
-files. Measured on a 4 MB pack: **two 64 KiB pages per key**, about 3 % of the file.
+files. Measured on a 4 MB pack: **two 64 KiB pages per key**, about 3 % of the file — and
+one `prefetch` of the ring rather than a key at a time, which is where most of that goes
+(see the ring row above).
 
 The two halves reach different loaders underneath and do *not* accept the same
 spellings: the metadata half reads a `file://` URL, the paged half refuses one. This

@@ -265,12 +265,18 @@ pub fn keys_near(p: const Pack, scene: text, cx: float, cy: float,
   out
 }
 
-/// Pull `keys` into `into`, and answer how many actually COST something.
+/// Pull `keys` into `into` in ONE traversal, and answer how many actually COST
+/// something.
 ///
 /// `source` is `blobs_path(base)`. A key already resident is skipped, so the answer is
-/// the number of round trips this call paid for: what a level boundary wants to log,
-/// and what a frame must be able to assert is zero. A key the pack does not hold is
-/// skipped too — an absent asset costs a lookup, not a record.
+/// the number this call paid for: what a level boundary wants to log, and what a frame
+/// must be able to assert is zero. A key the pack does not hold is skipped too — an
+/// absent asset costs a lookup, not a record.
+///
+/// **Ask for the whole ring at once.** The keys are fetched by a single
+/// `store_load_keys_text`, which opens one reader and shares its page cache; asking key
+/// by key opens a reader per key and re-fetches the same bucket-table page every time.
+/// That is why this takes a vector rather than a key, and why `keys_near` answers one.
 pub fn prefetch(into: hash<Blob[bl_key]>, source: text,
                 keys: const vector<text>) -> integer {
   // A `file://` base names a file on this machine, and the paged loader takes the
@@ -282,12 +288,17 @@ pub fn prefetch(into: hash<Blob[bl_key]>, source: text,
   // Byte offsets, because a slice is bytes: `len` counts CHARACTERS and a path
   // outside ASCII would be cut short by it.
   if src.starts_with("file://") { src = src[7..size(src)]; }
-  n = 0;
+  // Resident keys are dropped BEFORE the call, not after: the loader answers how many
+  // it FOUND, and a caller wants how many it PAID FOR.  Handing it a key already in
+  // hand would re-read it and report a cost that was not one — which is exactly the
+  // number a frame asserts is zero.
+  want: vector<text> = [];
   for k in keys {
     if into[k] != null { continue }
-    if store_load_key_text(into, src, k) { n += 1 }
+    want += [k];
   }
-  n
+  if len(want) == 0 { return 0 }
+  store_load_keys_text(into, src, want)
 }
 
 // --- Checking the layout before anything reads a pack ---
