@@ -11,4 +11,4 @@ jobs:
   ci:
     uses: loft-lang/loft/.github/workflows/library-ci-reusable.yml@main
     with:
-      packages: '["glb", "mesh3d"]'
+      packages: '["assets", "glb", "mesh3d"]'

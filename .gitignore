@@ -2,3 +2,14 @@ target/
 */native/target/
 *.tar.gz
 .DS_Store
+
+# loft build output — a `.loft/` cache appears in every directory a loft command runs
+# from, so this is one rule for the NAME rather than a row per location.  Always
+# regenerated, never committed.
+**/.loft/
+
+# generated native FFI bridge (regenerated on `loft test --native`)
+**/native-auto/
+
+# per-package loft dependency lock (regenerated)
+*/loft.lock
