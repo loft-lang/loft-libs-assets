@@ -21,6 +21,8 @@
 
 // --- What a pack holds ---
 
+use shapes;
+
 /// What a blob's bytes are, so a loader knows what to do with them without
 /// sniffing the content. `Rgba` is a texture page's own pixels — premultiplied,
 /// row-major, four bytes per texel — already decoded by the packer, so the runtime
@@ -57,6 +59,12 @@ pub struct PageInfo {
 }
 
 /// One sprite's rect within a page, plus the origin a stage places it by.
+///
+/// `ce_proxy` is the collision proxy DERIVED from this cell's own alpha at pack
+/// time (see `cell_proxy`), in cell-local coordinates. It is empty when nothing
+/// derived one — a pack built before proxies, or a cell with no opaque texels —
+/// and an empty proxy hits nothing, so a consumer that finds one absent falls back
+/// to the cell rect rather than colliding with everything.
 pub struct Cell {
   ce_key: text,
   ce_page: text,
@@ -66,6 +74,7 @@ pub struct Cell {
   ce_h: integer,
   ce_ox: float = 0.0,
   ce_oy: float = 0.0,
+  ce_proxy: vector<shapes::Rect>,
 }
 
 /// An animation: a run of cells laid out in one page's grid. Mirrors `stage`'s
@@ -288,6 +297,164 @@ pub fn prefetch(into: hash<Blob[bl_key]>, source: text,
     if store_load_key_text(into, src, k) { n += 1 }
   }
   n
+}
+
+// --- Deriving a collision proxy from the art ---
+
+/// A texel at or below this alpha is not part of the silhouette.
+///
+/// Not 128. Antialiased art has a fringe of low-alpha texels that visibly belong
+/// to the sprite, and a proxy that excludes them stops short of the outline a
+/// player sees. 8 is the value @PLN146 F7a measured the corpus with.
+pub const PROXY_ALPHA_ON = 8;
+
+/// How many bands a derived proxy is cut into.
+///
+/// Measured over 36 sprites (@PLN146 F7a): one tight box overshoots the art by
+/// +150.6 % on average, a convex hull by +54.9 %, 8 bands by +52.2 % and 16 by
+/// +36.7 % — and 16 beats the hull on mean, median AND worst case while needing no
+/// shape kind `shapes` does not have. 32 buys another 10 points for twice the
+/// boxes; 16 is where the curve flattens.
+pub const PROXY_BANDS = 16;
+
+/// The alpha of one texel of an `Rgba`/`Bytes` page, or 0 when it is off the page.
+///
+/// Off-page reads 0 — TRANSPARENT — rather than null, because the only caller is a
+/// containment scan and a texel that is not there cannot be part of a silhouette.
+fn texel_alpha(ta_px: const vector<u8>, ta_stride: integer, ta_x: integer,
+               ta_y: integer) -> integer {
+  ta_i = (ta_y * ta_stride + ta_x) * 4 + 3;
+  if ta_i < 0 || ta_i >= len(ta_px) { return 0 }
+  ta_px[ta_i]?
+}
+
+/// The along-axis extent of a cell's opaque mask: `(lo, hi)`, or `(-1, -1)` when
+/// nothing in the cell is opaque.
+///
+/// `swap` reads the mask transposed, which is how one routine serves both axes.
+fn opaque_extent(oe_px: const vector<u8>, oe_page: const PageInfo,
+                 oe_c: const Cell, oe_swap: boolean) -> (integer, integer) {
+  oe_lo = -1;
+  oe_hi = -1;
+  oe_vn = if oe_swap { oe_c.ce_w } else { oe_c.ce_h };
+  oe_un = if oe_swap { oe_c.ce_h } else { oe_c.ce_w };
+  for v in 0..oe_vn {
+    for u in 0..oe_un {
+      oe_ax = oe_c.ce_x + (if oe_swap { v } else { u });
+      oe_ay = oe_c.ce_y + (if oe_swap { u } else { v });
+      if texel_alpha(oe_px, oe_page.pi_w, oe_ax, oe_ay) > PROXY_ALPHA_ON {
+        if oe_lo < 0 { oe_lo = v; }
+        oe_hi = v;
+        break;
+      }
+    }
+  }
+  (oe_lo, oe_hi)
+}
+
+/// Band the opaque texels along ONE axis and take each band's tight box.
+///
+/// `swap` runs the identical decomposition on the other axis by reading the mask
+/// transposed and un-transposing the boxes, which is how one routine answers both
+/// without a second copy of the arithmetic. Boxes come back in CELL-LOCAL
+/// coordinates.
+fn band_boxes(bb_px: const vector<u8>, bb_page: const PageInfo, bb_c: const Cell,
+              bb_k: integer, bb_swap: boolean) -> vector<shapes::Rect> {
+  bb_out: vector<shapes::Rect> = [];
+  (bb_lo, bb_hi) = opaque_extent(bb_px, bb_page, bb_c, bb_swap);
+  if bb_lo < 0 { return bb_out }
+  bb_span = bb_hi - bb_lo + 1;
+  bb_un = if bb_swap { bb_c.ce_h } else { bb_c.ce_w };
+
+  // One accumulator per band.  Parallel vectors rather than a keyed collection:
+  // the index IS the key, and a hash here would allocate a record per band for a
+  // number the loop already has.
+  bmin_u: vector<integer> = [];
+  bmax_u: vector<integer> = [];
+  bmin_v: vector<integer> = [];
+  bmax_v: vector<integer> = [];
+  for _ in 0..bb_k {
+    bmin_u += [-1]; bmax_u += [-1]; bmin_v += [-1]; bmax_v += [-1];
+  }
+  for v in bb_lo..=bb_hi {
+    bb_band = ((v - bb_lo) * bb_k) / bb_span;
+    if bb_band > bb_k - 1 { bb_band = bb_k - 1; }
+    for u in 0..bb_un {
+      bb_ax = bb_c.ce_x + (if bb_swap { v } else { u });
+      bb_ay = bb_c.ce_y + (if bb_swap { u } else { v });
+      if texel_alpha(bb_px, bb_page.pi_w, bb_ax, bb_ay) <= PROXY_ALPHA_ON { continue }
+      if bmin_u[bb_band]? < 0 || u < bmin_u[bb_band]? { bmin_u[bb_band] = u; }
+      if u > bmax_u[bb_band]? { bmax_u[bb_band] = u; }
+      if bmin_v[bb_band]? < 0 || v < bmin_v[bb_band]? { bmin_v[bb_band] = v; }
+      if v > bmax_v[bb_band]? { bmax_v[bb_band] = v; }
+    }
+  }
+  for b in 0..bb_k {
+    if bmin_u[b]? < 0 { continue }
+    bb_uu = bmin_u[b]? as float;
+    bb_vv = bmin_v[b]? as float;
+    bb_uw = (bmax_u[b]? - bmin_u[b]? + 1) as float;
+    bb_vh = (bmax_v[b]? - bmin_v[b]? + 1) as float;
+    if bb_swap {
+      bb_out += [shapes::Rect{rx: bb_vv, ry: bb_uu, rw: bb_vh, rh: bb_uw}];
+    } else {
+      bb_out += [shapes::Rect{rx: bb_uu, ry: bb_vv, rw: bb_uw, rh: bb_vh}];
+    }
+  }
+  bb_out
+}
+
+/// Total area of a box set — the numerator of the overshoot the packer gates on.
+fn boxes_area(ba: const vector<shapes::Rect>) -> float {
+  ba_t = 0.0;
+  for r in ba { ba_t += r.rw * r.rh; }
+  ba_t
+}
+
+/// How many texels of this cell are opaque — the thing a proxy stands for, and the
+/// denominator of `proxy_overshoot`.
+pub fn opaque_texels(ot_px: const vector<u8>, ot_page: const PageInfo,
+                     ot_c: const Cell) -> integer {
+  ot_n = 0;
+  for y in 0..ot_c.ce_h {
+    for x in 0..ot_c.ce_w {
+      if texel_alpha(ot_px, ot_page.pi_w, ot_c.ce_x + x, ot_c.ce_y + y) > PROXY_ALPHA_ON {
+        ot_n += 1;
+      }
+    }
+  }
+  ot_n
+}
+
+/// Derive `c`'s collision proxy from the page's own alpha, in cell-local
+/// coordinates.
+///
+/// Banded on the TIGHTER axis: the derivation runs both ways and keeps the smaller
+/// total area. 17 of the 36 corpus sprites band better by column than by row, so
+/// choosing per sprite rather than fixing an axis takes the median overshoot from
+/// +29.2 % to +22.8 % — for the cost of running a pass twice at pack time, which
+/// is a cost nothing at runtime pays.
+///
+/// A cell with no opaque texels derives an EMPTY proxy, and an empty proxy hits
+/// nothing. That is the answer a fully transparent cell should give; a single box
+/// around it would collide with whatever stood there.
+pub fn cell_proxy(c: const Cell, page: const PageInfo, px: const vector<u8>,
+                  bands: integer = PROXY_BANDS) -> vector<shapes::Rect> {
+  rows = band_boxes(px, page, c, bands, false);
+  cols = band_boxes(px, page, c, bands, true);
+  if len(cols) > 0 && boxes_area(cols) < boxes_area(rows) { return cols }
+  rows
+}
+
+/// How much bigger a derived proxy is than the art it stands for.
+///
+/// The number F7 gates on: `<= 1.0` is at most twice the art. Reported per sprite
+/// rather than asserted in aggregate, because one adversarial shape — three thin
+/// diagonal arrows — misses the bound at every band count, and a bound nothing can
+/// violate is not a bound.
+pub fn proxy_overshoot(po_boxes: const vector<shapes::Rect>, po_solid: integer) -> float {
+  if po_solid <= 0 { return 0.0 }
+  ((boxes_area(po_boxes) - (po_solid as float)) / (po_solid as float))?
 }
 
 // --- Checking the layout before anything reads a pack ---
