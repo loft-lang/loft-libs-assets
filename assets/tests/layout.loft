@@ -6,7 +6,7 @@
 // a field that moves reads a neighbour's value out of packs already in the wild.
 use assets;
 
-/// What the layout of `assets` 0.1.0 hashes to.
+/// What the layout of `assets` 0.2.0 hashes to.
 ///
 /// A CHANGE HERE IS A FORMAT CHANGE.  Packs written by an earlier release are read at
 /// the offsets this number stands for, so if this test fails, one of two things
@@ -18,12 +18,17 @@ use assets;
 ///   * loft's own layout rules moved under us — the same breakage, arriving without
 ///     an edit, which is exactly why this is pinned rather than merely computed.
 ///
+/// 0.1.0 hashed to 21440911.  It moved at 0.2.0 because `Cell` gained `ce_proxy`
+/// (@PLN146 F7) — the FIRST answer above, an edit we made, so `data_compatible_with`
+/// moved with it.  The old number stays written down here: a pin nobody can compare
+/// against does not say a format changed, only that one is different.
+///
 /// Measured identical on the interpreter and `--native`.
-LAYOUT_0_1_0 = 21440911;
+LAYOUT_0_2_0 = 2433656147;
 
 fn test_the_layout_of_this_release_is_the_one_it_promises() {
-  assert(layout_fingerprint() == LAYOUT_0_1_0,
-         "the pack layout changed: {layout_fingerprint()} (was {LAYOUT_0_1_0}) — read the note on LAYOUT_0_1_0, and layout_descriptor() for the field that moved");
+  assert(layout_fingerprint() == LAYOUT_0_2_0,
+         "the pack layout changed: {layout_fingerprint()} (was {LAYOUT_0_2_0}) — read the note on LAYOUT_0_2_0, and layout_descriptor() for the field that moved");
 }
 
 fn test_the_fingerprint_is_taken_over_real_content() {
