@@ -457,6 +457,120 @@ pub fn proxy_overshoot(po_boxes: const vector<shapes::Rect>, po_solid: integer) 
   ((boxes_area(po_boxes) - (po_solid as float)) / (po_solid as float))?
 }
 
+// --- Building a page out of sprites ---
+
+/// The RGBA bytes of a row-major buffer of `0xAARRGGBB` words.
+///
+/// Both routes into a `Tile` end here. A `graphics::Canvas` holds exactly these
+/// words in `data`, and a PNG decoded by `imaging` answers them one pixel at a time
+/// through `Pixel.rgba()` — so a sprite rendered in this process and the same sprite
+/// read back off disk become the same texels by the same arithmetic, rather than by
+/// two conversions that agree until one of them is edited.
+///
+/// Alpha is carried STRAIGHT, not premultiplied: see `page_grid`.
+pub fn texels(words: const vector<integer>) -> vector<u8> {
+  tx_out: vector<u8> = [];
+  for w in words {
+    tx_out += [((w >> 16) & 255) as u8?, ((w >> 8) & 255) as u8?,
+               (w & 255) as u8?, ((w >> 24) & 255) as u8?];
+  }
+  tx_out
+}
+
+/// One sprite on its way into a page: the key it will be known by, its size, and
+/// its texels.
+///
+/// `ti_px` is `ti_w * ti_h * 4` bytes of STRAIGHT-alpha RGBA, row-major. Where
+/// those bytes came from is deliberately not this package's business — a decoded
+/// PNG and a canvas rendered in this process are the same tile here, which is what
+/// lets a sprite authored as text skip the file it used to have to become.
+pub struct Tile {
+  ti_key: text,
+  ti_w: integer,
+  ti_h: integer,
+  ti_px: vector<u8>,
+  /// Where the stage places the sprite BY, in cell-local texels — the feet of a
+  /// character rather than its top-left corner.
+  ti_ox: float = 0.0,
+  ti_oy: float = 0.0,
+}
+
+/// `n` zero bytes.
+///
+/// Built by DOUBLING: a page buffer is megabytes, and appending one element at a
+/// time costs three bytecodes each, while appending a vector to itself is one
+/// block copy.
+fn zero_bytes(n: integer) -> vector<u8> {
+  zb: vector<u8> = [];
+  if n <= 0 { return zb }
+  zb += [0];
+  while len(zb) < n { zb += zb; }
+  if len(zb) == n { return zb }
+  zt = zb[0..n];
+  zt
+}
+
+/// The smallest square-ish column count for `n` tiles.
+fn grid_cols(n: integer) -> integer {
+  gc = 1;
+  while gc * gc < n { gc += 1; }
+  gc
+}
+
+/// Lay tiles out in a grid page, blit their texels into it, and record one `Cell`
+/// per tile — with each cell's collision proxy DERIVED from the alpha as it lands.
+///
+/// The page is sized from the widest and tallest tile, so every cell shares one
+/// grid step; `pad` puts transparent texels between them, which is what a sampler
+/// that filters needs to stop a neighbour bleeding in. Answers false — writing
+/// nothing — when a tile's byte count disagrees with the size it declares, because
+/// a packer that quietly places a truncated sprite is the failure this exists to
+/// prevent.
+///
+/// The pixels land under `blob` as `Bytes`: STRAIGHT alpha, not premultiplied,
+/// because that is what a blend of SRC_ALPHA / ONE_MINUS_SRC_ALPHA expects.
+/// `BlobKind::Rgba` promises premultiplied texels and these are not.
+pub fn page_grid(p: Pack, blobs: &hash<Blob[bl_key]>, page: text, blob: text,
+                 tiles: const vector<Tile>, cols: integer = 0,
+                 pad: integer = 0) -> boolean {
+  if len(tiles) == 0 { return false }
+  for t in tiles {
+    if t.ti_w <= 0 || t.ti_h <= 0 { return false }
+    if len(t.ti_px) != t.ti_w * t.ti_h * 4 { return false }
+  }
+  pg_cols = if cols > 0 { cols } else { grid_cols(len(tiles)) };
+  pg_rows = ((len(tiles) + pg_cols - 1) / pg_cols)?;
+  pg_cw = 0;
+  pg_ch = 0;
+  for t in tiles {
+    if t.ti_w > pg_cw { pg_cw = t.ti_w; }
+    if t.ti_h > pg_ch { pg_ch = t.ti_h; }
+  }
+  pg_w = pg_cols * (pg_cw + pad) - pad;
+  pg_h = pg_rows * (pg_ch + pad) - pad;
+  pg_px = zero_bytes(pg_w * pg_h * 4);
+  pg_info = PageInfo { pi_name: page, pi_w: pg_w, pi_h: pg_h, pi_blob: blob };
+
+  for i in 0..len(tiles) {
+    pg_t = tiles[i]?;
+    pg_x = ((i % pg_cols)?) * (pg_cw + pad);
+    pg_y = ((i / pg_cols)?) * (pg_ch + pad);
+    for y in 0..pg_t.ti_h {
+      pg_src = y * pg_t.ti_w * 4;
+      pg_dst = ((pg_y + y) * pg_w + pg_x) * 4;
+      for k in 0..(pg_t.ti_w * 4) { pg_px[pg_dst + k] = pg_t.ti_px[pg_src + k]?; }
+    }
+    pg_c = Cell { ce_key: pg_t.ti_key, ce_page: page, ce_x: pg_x, ce_y: pg_y,
+                  ce_w: pg_t.ti_w, ce_h: pg_t.ti_h,
+                  ce_ox: pg_t.ti_ox, ce_oy: pg_t.ti_oy, ce_proxy: [] };
+    pg_c.ce_proxy = cell_proxy(pg_c, pg_info, pg_px);
+    p.cells += [pg_c];
+  }
+  p.pages += [pg_info];
+  blob_put(blobs, blob, BlobKind.Bytes, pg_px);
+  true
+}
+
 // --- Checking the layout before anything reads a pack ---
 
 /// The pack's own types, field by field, as the store records them.

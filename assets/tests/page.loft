@@ -1,0 +1,119 @@
+// Copyright (c) 2026 Jurjen Stellingwerff
+// SPDX-License-Identifier: LGPL-3.0-or-later
+//
+// Building a page out of sprites: where each cell lands, what the texels between
+// them are, and what happens to a tile that lies about its size.
+//
+// Every expected value here is hand-computed from the grid arithmetic rather than
+// read off a run — a placer that agrees with itself is exactly the failure a
+// self-comparison cannot see.
+use assets;
+
+/// `w * h` texels of one colour, as straight-alpha RGBA bytes.
+fn solid(w: integer, h: integer, r: integer, g: integer, b: integer, a: integer) -> vector<u8> {
+  out: vector<u8> = [];
+  for _ in 0..(w * h) { out += [r as u8?, g as u8?, b as u8?, a as u8?]; }
+  out
+}
+
+fn byte_at(px: const vector<u8>, w: integer, x: integer, y: integer, c: integer) -> integer {
+  px[(y * w + x) * 4 + c]?
+}
+
+fn test_a_word_becomes_four_bytes_in_rgba_order() {
+  // 0xAARRGGBB in, R G B A out — the order a texture page holds and the order a
+  // decoded PNG arrives in.
+  got = texels([0x804090C0, 0xFF000000]);
+  assert(len(got) == 8, "two words, eight bytes, got {len(got)}");
+  assert(got[0]? == 0x40 && got[1]? == 0x90 && got[2]? == 0xC0 && got[3]? == 0x80,
+         "R G B A, got {got[0]?} {got[1]?} {got[2]?} {got[3]?}");
+  assert(got[7]? == 255, "an opaque black stays opaque");
+}
+
+fn test_two_tiles_share_one_page() {
+  p = new_pack();
+  blobs: hash<Blob[bl_key]> = [];
+  ok = page_grid(p, blobs, "atlas", "page/atlas",
+                 [Tile { ti_key: "a", ti_w: 2, ti_h: 2, ti_px: solid(2, 2, 200, 10, 10, 255) },
+                  Tile { ti_key: "b", ti_w: 2, ti_h: 2, ti_px: solid(2, 2, 10, 10, 200, 255) }], 2);
+  assert(ok, "two well-formed tiles are placed");
+  info = p.pages["atlas"];
+  assert(info.pi_w == 4 && info.pi_h == 2, "two 2x2 cells side by side: 4x2, got {info.pi_w}x{info.pi_h}");
+  assert(p.cells["a"].ce_x == 0 && p.cells["a"].ce_y == 0, "the first cell is at the origin");
+  assert(p.cells["b"].ce_x == 2 && p.cells["b"].ce_y == 0, "the second is one grid step along");
+  px = blobs["page/atlas"].bl_bytes;
+  assert(len(px) == 4 * 2 * 4, "the page is width*height*4 bytes, got {len(px)}");
+  assert(byte_at(px, 4, 0, 1, 0) == 200, "a's second ROW is a's, not b's");
+  assert(byte_at(px, 4, 2, 1, 2) == 200, "and b's second row is b's — the blit is row-major");
+}
+
+fn test_padding_puts_transparent_texels_between_cells() {
+  p = new_pack();
+  blobs: hash<Blob[bl_key]> = [];
+  _ = page_grid(p, blobs, "atlas", "page/atlas",
+                [Tile { ti_key: "a", ti_w: 2, ti_h: 2, ti_px: solid(2, 2, 200, 10, 10, 255) },
+                 Tile { ti_key: "b", ti_w: 2, ti_h: 2, ti_px: solid(2, 2, 10, 10, 200, 255) }], 2, 1);
+  info = p.pages["atlas"];
+  assert(info.pi_w == 5, "2*(2+1)-1 = 5 — the gutter is BETWEEN cells, not after the last");
+  assert(p.cells["b"].ce_x == 3, "b starts past the gutter, got {p.cells[\"b\"].ce_x}");
+  px = blobs["page/atlas"].bl_bytes;
+  assert(byte_at(px, 5, 2, 0, 3) == 0, "the gutter column is transparent");
+}
+
+fn test_a_smaller_tile_keeps_its_own_rect() {
+  p = new_pack();
+  blobs: hash<Blob[bl_key]> = [];
+  _ = page_grid(p, blobs, "atlas", "page/atlas",
+                [Tile { ti_key: "big", ti_w: 2, ti_h: 2, ti_px: solid(2, 2, 200, 10, 10, 255) },
+                 Tile { ti_key: "small", ti_w: 1, ti_h: 1, ti_px: solid(1, 1, 10, 200, 10, 255) }], 2);
+  info = p.pages["atlas"];
+  assert(info.pi_w == 4 && info.pi_h == 2, "the grid step is the WIDEST tile, got {info.pi_w}x{info.pi_h}");
+  small = p.cells["small"];
+  assert(small.ce_x == 2 && small.ce_w == 1 && small.ce_h == 1,
+         "the cell is the sprite's own size, not the step's");
+  px = blobs["page/atlas"].bl_bytes;
+  assert(byte_at(px, 4, 2, 0, 1) == 200, "the small tile landed");
+  assert(byte_at(px, 4, 3, 0, 3) == 0, "and the rest of its cell stayed transparent");
+}
+
+fn test_the_grid_squares_itself_when_no_column_count_is_given() {
+  // Three tiles: the smallest square-ish grid is 2 wide, so the third wraps.
+  p = new_pack();
+  blobs: hash<Blob[bl_key]> = [];
+  _ = page_grid(p, blobs, "atlas", "page/atlas",
+                [Tile { ti_key: "a", ti_w: 2, ti_h: 2, ti_px: solid(2, 2, 200, 10, 10, 255) },
+                 Tile { ti_key: "b", ti_w: 2, ti_h: 2, ti_px: solid(2, 2, 10, 200, 10, 255) },
+                 Tile { ti_key: "c", ti_w: 2, ti_h: 2, ti_px: solid(2, 2, 10, 10, 200, 255) }]);
+  info = p.pages["atlas"];
+  assert(info.pi_w == 4 && info.pi_h == 4, "2x2 cells of 2x2: 4x4, got {info.pi_w}x{info.pi_h}");
+  assert(p.cells["c"].ce_x == 0 && p.cells["c"].ce_y == 2, "the third tile wraps to the next row");
+  px = blobs["page/atlas"].bl_bytes;
+  assert(byte_at(px, 4, 0, 2, 2) == 200, "and its texels went with it");
+  assert(byte_at(px, 4, 2, 2, 3) == 0, "the unused fourth cell stays transparent");
+}
+
+fn test_a_tile_that_lies_about_its_size_is_refused() {
+  p = new_pack();
+  blobs: hash<Blob[bl_key]> = [];
+  ok = page_grid(p, blobs, "atlas", "page/atlas",
+                 [Tile { ti_key: "t", ti_w: 2, ti_h: 2, ti_px: [1, 2, 3] }], 1);
+  assert(!ok, "a truncated tile is refused");
+  assert(len(p.pages) == 0 && len(p.cells) == 0, "and nothing is written");
+  assert(page_grid(p, blobs, "atlas", "page/atlas", [], 1) == false, "so is an empty list");
+}
+
+fn test_a_proxy_is_derived_as_the_cell_lands() {
+  p = new_pack();
+  blobs: hash<Blob[bl_key]> = [];
+  _ = page_grid(p, blobs, "atlas", "page/atlas",
+                [Tile { ti_key: "solid", ti_w: 4, ti_h: 4, ti_px: solid(4, 4, 200, 10, 10, 255) },
+                 Tile { ti_key: "clear", ti_w: 4, ti_h: 4, ti_px: solid(4, 4, 0, 0, 0, 0) }], 2);
+  solid_c = p.cells["solid"];
+  clear_c = p.cells["clear"];
+  assert(len(solid_c.ce_proxy) > 0, "opaque art derives a proxy with no hand edit");
+  area = 0.0;
+  for r in solid_c.ce_proxy { area += r.rw * r.rh; }
+  assert(area == 16.0, "a full 4x4 square is covered exactly once, got {area}");
+  assert(len(clear_c.ce_proxy) == 0,
+         "a transparent cell derives NOTHING — a box around it would collide with the air");
+}

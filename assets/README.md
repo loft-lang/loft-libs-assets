@@ -49,6 +49,29 @@ fn main() {
 64x32, 8192 bytes
 ```
 
+## Building a page out of sprites
+
+A sprite arrives as texels from wherever the packer got them — a PNG decoded with
+`imaging`, or a picture rendered in this process and never written to disk. `page_grid`
+lays them out, blits them, and records one `Cell` each **with its collision proxy derived
+from the alpha as it lands**, so re-arting a sprite moves its hitbox with no hand edit.
+
+```loft
+tiles = [Tile { ti_key: "goblin", ti_w: 32, ti_h: 32, ti_px: texels(canvas.data) },
+         Tile { ti_key: "rat",    ti_w: 32, ti_h: 32, ti_px: texels(other.data) }];
+_ = page_grid(p, blobs, "mobs", "page/mobs", tiles, 0, 1);   // cols=auto, 1px gutter
+```
+
+`texels(words)` is the one conversion both routes go through: a `graphics::Canvas` holds
+`0xAARRGGBB` words in `data`, and a decoded PNG answers the same words through
+`Pixel.rgba()`. Alpha stays STRAIGHT — a page destined for `SRC_ALPHA` blending must not
+be premultiplied — so the pixels land as `Bytes` and not as `Rgba`.
+
+`page_grid` sizes the page from the widest and tallest tile, so every cell shares one grid
+step while each `Cell` keeps its sprite's own rect. It answers **false, writing nothing**,
+when a tile's byte count disagrees with the size it declares: a packer that quietly places
+a truncated sprite is the failure it exists to prevent.
+
 ## Why a pack is two files
 
 Split by how each half is **read**:
@@ -121,7 +144,10 @@ browser reads packs rather than building them.
 
 It stores bytes and says what they are (`BlobKind`); it does not **decode** them. PNG
 decoding, audio decoding and GL upload belong to the consumer — which is what keeps this
-package headless, so an asset pipeline needs no GPU.
+package headless, so an asset pipeline needs no GPU. `page_grid` places texels a caller
+already has for the same reason: it takes `vector<u8>`, so this package depends on
+`shapes` and nothing else, and a pack format that linked a renderer would drag one into
+every consumer of it.
 
 ## License
 
