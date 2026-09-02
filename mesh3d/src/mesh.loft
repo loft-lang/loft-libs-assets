@@ -13,6 +13,9 @@ pub struct Vertex {
   uv: math::Vec2
 }
 
+// One vertex: where it is, which way it faces, and where it samples a texture.
+// `mesh_to_floats_uv` writes those three in exactly this order, so a GL
+// consumer's attribute layout is read off this line.
 pub fn vertex(vp: math::Vec3, vn: math::Vec3, vuv: math::Vec2) -> Vertex {
   Vertex { pos: vp, normal: vn, uv: vuv }
 }
@@ -31,6 +34,9 @@ pub struct Mesh {
   triangles: vector<Triangle>
 }
 
+// An empty mesh under a name.  Fill it with `add_vertex`, then `add_triangle`
+// with the indices `add_vertex` handed back — the triangles index the vertex
+// array, so a vertex shared by two faces is added once and named twice.
 pub fn mesh(mn: text) -> Mesh {
   Mesh { name: mn }
 }

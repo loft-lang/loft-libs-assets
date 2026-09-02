@@ -21,6 +21,32 @@
 // submodule is still importable individually
 // (`use math;` / `use mesh;` / `use scene;`) for cases where only
 // one sub-surface is needed.
+//
+// --- Using it ---
+//
+// A scene is three index spaces — meshes, materials, nodes — and a node is a
+// pairing of one of each with a transform:
+//
+//     sc = mesh3d::scene("hall");
+//     mi = sc.add_mesh(mesh3d::cube());
+//     ma = sc.add_material(mesh3d::material_color("brass", 0.8, 0.6, 0.2));
+//
+//     xf = mesh3d::mat4_mul(mesh3d::mat4_translate(0.0, 1.0, 0.0),
+//                           mesh3d::mat4_scale(2.0, 2.0, 2.0));
+//     sc.add_node(mesh3d::node_at("crate", mi, ma, xf));
+//     sc.add_light(mesh3d::directional_light("sun", 1.0, 1.0, 0.9, 3.0,
+//                                            mesh3d::vec3(0.0, -1.0, 0.0)));
+//
+//     mesh3d::mat4_transform(xf, mesh3d::vec3(1.0, 0.0, 0.0));  // -> (2, 1, 0)
+//     mesh3d::mesh_to_floats(mesh3d::cube());   // -> 216 floats, ready for GL
+//
+// Every `add_*` answers the INDEX the scene refers to that thing by, and those
+// indices are what a node carries — so a mesh or a material is shared by naming
+// it twice, never by copying it.
+//
+// Matrices are COLUMN-MAJOR, matching OpenGL and glTF, and `mat4_mul(a, b)`
+// applies b first: the composition above scales, then translates.  Nothing here
+// touches a GPU — `glb` writes a scene out, `graphics` draws one.
 
 use math;
 use mesh;

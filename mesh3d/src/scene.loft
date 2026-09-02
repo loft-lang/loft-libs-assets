@@ -18,6 +18,9 @@ pub struct Material {
   roughness: float
 }
 
+// A neutral material: light grey, half rough, not metal.  Everything below
+// adjusts this rather than building one from nothing, so a new field gets a
+// sane value in one place.
 pub fn material(mname: text) -> Material {
   Material {
     name: mname,
@@ -42,6 +45,8 @@ pub fn material_metal(mname: text, mr: float, mg: float, mb: float, mrough: floa
   }
 }
 
+// Repaint a material in place.  Alpha, metallic and roughness are left alone,
+// which is what makes this safe to call on a material somebody else built.
 pub fn set_color(self: Material, scr: float, scg: float, scb: float) {
   self.base_color_r = scr;
   self.base_color_g = scg;
@@ -58,6 +63,10 @@ pub struct Node {
   transform: math::Mat4
 }
 
+// Put a mesh in the scene at the origin, naming the mesh and the material by
+// the indices `add_mesh` and `add_material` answered.  `node_at` is this with a
+// transform, and is the one to reach for — a node built here and then mutated
+// is two steps where one would do.
 pub fn node(nn: text, nm: integer, nmat: integer) -> Node {
   Node { name: nn, mesh_idx: nm, material_idx: nmat, transform: math::mat4_identity() }
 }
@@ -78,6 +87,14 @@ pub struct Camera {
   target: math::Vec3
 }
 
+// A camera with usable defaults: field 60, clipping at 0.1 and 100, standing at
+// z = 5 and looking at the origin.
+//
+// ⚠ THE FIELD IS IN DEGREES AND NOTHING HERE CONVERTS IT.  `Camera` is carried
+// as data — no routine in this package or in `glb` reads `fov` — so the caller
+// that eventually builds a projection owns the conversion, and
+// `mat4_perspective` wants RADIANS.  Handing it this number unchanged asks for a
+// 60-radian field and gets a picture nobody can read.
 pub fn camera(cname: text) -> Camera {
   Camera {
     name: cname,
@@ -102,6 +119,8 @@ pub struct Light {
   direction: math::Vec3
 }
 
+// A light with a direction and no place — the sun.  Every surface in the scene
+// receives it at the same angle, however far away it is.
 pub fn directional_light(ln: text, lr: float, lg: float, lb: float, li: float, ldir: math::Vec3) -> Light {
   Light {
     name: ln, light_type: Directional,
@@ -110,6 +129,8 @@ pub fn directional_light(ln: text, lr: float, lg: float, lb: float, li: float, l
   }
 }
 
+// A light with a place and no direction — a lamp.  It carries a direction field
+// because `Light` is one struct for all three kinds; nothing reads it here.
 pub fn point_light(ln: text, lr: float, lg: float, lb: float, li: float, lpos: math::Vec3) -> Light {
   Light {
     name: ln, light_type: Point,
@@ -130,6 +151,8 @@ pub struct Scene {
   lights: vector<Light>
 }
 
+// An empty scene.  The five `add_*` below fill it, and each answers the INDEX
+// the rest of the scene refers to that thing by.
 pub fn scene(sn: text) -> Scene {
   Scene { name: sn }
 }
@@ -158,6 +181,7 @@ pub fn add_camera(self: Scene, sc: Camera) {
   self.cameras += [sc];
 }
 
+// Add a light and answer its index.
 pub fn add_light(self: Scene, sl: Light) -> integer {
   si = self.lights.len();
   self.lights += [sl];

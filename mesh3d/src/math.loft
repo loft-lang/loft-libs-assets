@@ -11,6 +11,7 @@ pub struct Vec2 {
   y: float
 }
 
+// Make one.  Texture coordinates are what this is usually carrying.
 pub fn vec2(vx: float, vy: float) -> Vec2 {
   Vec2 { x: vx, y: vy }
 }
@@ -22,6 +23,9 @@ pub struct Vec3 {
   z: float
 }
 
+// Make one.  The workhorse of the package — positions, normals and directions
+// are all this type, and which of the three a value is depends on what the
+// caller does with it, not on the type.
 pub fn vec3(vx: float, vy: float, vz: float) -> Vec3 {
   Vec3 { x: vx, y: vy, z: vz }
 }
@@ -34,28 +38,41 @@ pub struct Vec4 {
   w: float
 }
 
+// Make one.  The w is what separates a POINT (w = 1, moved by a translation)
+// from a DIRECTION (w = 0, which a translation must leave alone).
 pub fn vec4(vx: float, vy: float, vz: float, vw: float) -> Vec4 {
   Vec4 { x: vx, y: vy, z: vz, w: vw }
 }
 
 // --- Vec3 operations ---
 
+// Component-wise sum.  Answers a FRESH vector and touches neither argument —
+// which is what the `const` on both of them says.
 pub fn add3(va: const Vec3, vb: const Vec3) -> Vec3 {
   Vec3 { x: va.x + vb.x, y: va.y + vb.y, z: va.z + vb.z }
 }
 
+// The way from `vb` to `va`.  `sub3(target, eye)` is where the camera is
+// looking; length and direction both come out of it.
 pub fn sub3(va: const Vec3, vb: const Vec3) -> Vec3 {
   Vec3 { x: va.x - vb.x, y: va.y - vb.y, z: va.z - vb.z }
 }
 
+// Stretch by a scalar.  After `normalize3` this reads as *that far along that
+// direction*, which is how a step or an offset is built.
 pub fn scale3(sv: const Vec3, ss: float) -> Vec3 {
   Vec3 { x: sv.x * ss, y: sv.y * ss, z: sv.z * ss }
 }
 
+// How much of `da` points along `db`.  Zero is perpendicular and negative is
+// facing away — the one test a back-face cull and a diffuse light term are
+// both written on.
 pub fn dot3(da: const Vec3, db: const Vec3) -> float {
   da.x * db.x + da.y * db.y + da.z * db.z
 }
 
+// The vector perpendicular to both, right-handed.  A triangle's face normal is
+// the cross of two of its edges, which is where most calls come from.
 pub fn cross(ca: const Vec3, cb: const Vec3) -> Vec3 {
   Vec3 {
     x: ca.y * cb.z - ca.z * cb.y,
@@ -64,10 +81,17 @@ pub fn cross(ca: const Vec3, cb: const Vec3) -> Vec3 {
   }
 }
 
+// How long it is.  Comparing two lengths does not need the square root —
+// `dot3(v, v)` orders them the same way and is cheaper.
 pub fn length3(lv: const Vec3) -> float {
   sqrt(lv.x * lv.x + lv.y * lv.y + lv.z * lv.z)
 }
 
+// The same direction at length 1 — what a normal, a light direction and an axis
+// all have to be before the arithmetic below means anything.
+//
+// ⚠ A ZERO vector answers ZERO rather than a NaN, so a degenerate triangle
+// poisons one normal instead of the whole mesh.
 pub fn normalize3(nv: const Vec3) -> Vec3 {
   nl = length3(nv);
   // `/ nl ?? 0.0` yields a zero vector for a zero-length input — same
