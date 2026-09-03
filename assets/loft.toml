@@ -1,15 +1,17 @@
 [package]
 name    = "assets"
-version = "0.2.0"
+version = "0.3.0"
 loft    = ">=0.8"
 description = "A game's content pack that IS a loft store — art, audio and the scenes that place them, range-read off a static file server.  No codec, no parse step, no server-side code."
 categories  = ["game", "asset-format"]
 
-api_compatible_with  = "0.2.0"   # DECLARED BREAK: `Cell` gained `ce_proxy`, so the
-                                 # type and the pack layout both moved.  A pack is a
-                                 # STORE — the struct definitions are the file
-                                 # layout — so a 0.1.0 pack is not readable here.
-data_compatible_with = "0.2.0"   # same reason, and the one that actually bites
+api_compatible_with  = "0.2.0"   # 0.3.0 is additive: `Tile`, `texels` and `page_grid`
+                                 # are new names and no existing one moved.  0.2.0 was
+                                 # the DECLARED BREAK — `Cell` gained `ce_proxy`, and a
+                                 # pack is a STORE, so the struct definitions ARE the
+                                 # file layout and a 0.1.0 pack is not readable here.
+data_compatible_with = "0.2.0"   # unchanged by 0.3.0: no packed type gained a field,
+                                 # and `layout_fingerprint()` still answers what it did
 
 [library]
 entry = "src/assets.loft"
