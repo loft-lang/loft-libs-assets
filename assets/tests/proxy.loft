@@ -14,7 +14,10 @@ use shapes;
 // A blank RGBA page, `w * h` texels, every one fully transparent.
 fn blank_page(bw: integer, bh: integer) -> vector<u8> {
   bp: vector<u8> = [];
-  for _ in 0..(bw * bh * 4) { bp += [0 as u8?]; }
+  // `0 as u8` and not `0 as u8?`: a checked cast is required only where the value
+  // could overflow the target width at run time, and a literal 0 cannot.  The
+  // nullable form would put an `u8?` into a `vector<u8>`, where it becomes null.
+  for _ in 0..(bw * bh * 4) { bp += [0 as u8]; }
   bp
 }
 
