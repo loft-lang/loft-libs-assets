@@ -78,6 +78,8 @@ pub fn node_at(nn: text, nm: integer, nmat: integer, xf: math::Mat4) -> Node {
 
 // --- Camera ---
 
+// A camera in a scene: its name, its field of view in degrees, its near and far clipping
+// distances, where it stands and what it looks at.  `camera` makes one with usable defaults.
 pub struct Camera {
   name: text,
   fov: float,
@@ -106,8 +108,12 @@ pub fn camera(cname: text) -> Camera {
 
 // --- Lights (KHR_lights_punctual) ---
 
+// How a light reaches the scene: from a direction only, from a point in every direction, or
+// from a point within a cone.
 pub enum LightType { Directional, Point, Spot }
 
+// A light in a scene: its name and kind, its colour and intensity, and the position and
+// direction its kind reads (a directional light has no place, a point light no direction).
 pub struct Light {
   name: text,
   light_type: LightType,
