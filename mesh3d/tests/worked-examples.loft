@@ -170,10 +170,13 @@ fn test_which_way_a_face_points() {
 // The winding of triangle `gn_i`, as its geometric normal's y component.
 // Positive means counter-clockwise seen from +y.
 fn geometric_normal_y(gn_m: const mesh::Mesh, gn_i: integer) -> float {
-  gn_t = gn_m.triangles[gn_i];
-  gn_a = gn_m.vertices[gn_t.a].pos;
-  gn_b = gn_m.vertices[gn_t.b].pos;
-  gn_c = gn_m.vertices[gn_t.c].pos;
+  // `?` on each element read: an index the mesh does not hold reads as the zero
+  // vertex, whose cross product is the zero vector — so a bad index answers 0.0 and
+  // fails the caller's `< 0.0` / `> 0.0` assertion instead of passing quietly.
+  gn_t = gn_m.triangles[gn_i]?;
+  gn_a = gn_m.vertices[gn_t.a]?.pos;
+  gn_b = gn_m.vertices[gn_t.b]?.pos;
+  gn_c = gn_m.vertices[gn_t.c]?.pos;
   math::cross(math::sub3(gn_b, gn_a), math::sub3(gn_c, gn_a)).y
 }
 

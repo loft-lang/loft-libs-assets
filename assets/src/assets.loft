@@ -377,7 +377,9 @@ fn band_boxes(bb_px: const vector<u8>, bb_page: const PageInfo, bb_c: const Cell
     bmin_u += [-1]; bmax_u += [-1]; bmin_v += [-1]; bmax_v += [-1];
   }
   for v in bb_lo..=bb_hi {
-    bb_band = ((v - bb_lo) * bb_k) / bb_span;
+    // `/` types nullable (a zero divisor answers null); `bb_span` is `bb_hi - bb_lo + 1`
+    // behind the `bb_lo < 0` return above, so it is at least 1 and `?? 0` is unreachable.
+    bb_band = ((v - bb_lo) * bb_k) / bb_span ?? 0;
     if bb_band > bb_k - 1 { bb_band = bb_k - 1; }
     for u in 0..bb_un {
       bb_ax = bb_c.ce_x + (if bb_swap { v } else { u });

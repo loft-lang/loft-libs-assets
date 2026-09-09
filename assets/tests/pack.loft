@@ -66,11 +66,18 @@ fn test_a_written_pack_reads_back_identical() {
   qb: hash<Blob[bl_key]> = [];
   assert(store_load(qb, blobs_path(base)), "bulk half read back");
   out = qb["page/mobs"];
-  assert(out != null, "page pixels present");
-  assert(same_bytes(out.bl_bytes, b["page/mobs"].bl_bytes), "pixels byte-identical");
+  src = b["page/mobs"];
+  assert(out != null and src != null, "page pixels present");
+  // A keyed read answers `Blob?`, so the bytes are `vector<u8>?`.  Every `?? []` in
+  // this file sits behind a non-null assert on the line above it: the default is what
+  // an already-failed test would have read, never a comparison of two empty vectors.
+  assert(same_bytes(out.bl_bytes ?? [], src.bl_bytes ?? []), "pixels byte-identical");
   assert(out.bl_kind is Rgba, "the kind came back too");
   // Length alone cannot witness the bytes: two blobs of the same size differ here.
-  assert(!same_bytes(qb["page/items"].bl_bytes, qb["hit.ogg"].bl_bytes),
+  items = qb["page/items"];
+  clip = qb["hit.ogg"];
+  assert(items != null and clip != null, "both fixture blobs are resident");
+  assert(!same_bytes(items.bl_bytes ?? [], clip.bl_bytes ?? []),
          "the fixture's blobs are distinguishable at all");
   clean(base);
 }
@@ -90,7 +97,7 @@ fn test_one_key_reads_without_the_rest_of_the_pack() {
   got = prefetch(res, blobs_path(base), ["hit.ogg"]);
   assert(got == 1, "the fetch cost one round trip");
   clip = res["hit.ogg"];
-  assert(clip != null && len(clip.bl_bytes) == 2048, "the clip arrived whole");
+  assert(clip != null && len(clip.bl_bytes ?? []) == 2048, "the clip arrived whole");
   n = 0;
   for _r in res { n += 1; }
   assert(n == 1, "only the requested key is resident, not the two pages");
@@ -140,8 +147,9 @@ fn test_one_base_drives_both_halves_as_a_url() {
   got = prefetch(res, blobs_path(url), ["hit.ogg"]);
   assert(got == 1, "the bulk half fetched through the SAME base, got {got}");
   clip = res["hit.ogg"];
-  assert(clip != null, "a record, not a refusal");
-  assert(same_bytes(clip.bl_bytes, b["hit.ogg"].bl_bytes), "the same bytes as the path read");
+  fix = b["hit.ogg"];
+  assert(clip != null and fix != null, "a record, not a refusal");
+  assert(same_bytes(clip.bl_bytes ?? [], fix.bl_bytes ?? []), "the same bytes as the path read");
   clean(base);
 }
 
