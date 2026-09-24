@@ -1,0 +1,191 @@
+// Copyright (c) 2026 Jurjen Stellingwerff
+// SPDX-License-Identifier: LGPL-3.0-or-later
+//
+// bench — the performance pass: the package's hot doors, timed on a fixed workload, with a
+// hash of what they produced.
+//
+//     loft --interpret bench/bench.loft [--n N]         the interpreter
+//     loft --native-release bench/bench.loft [--n N]    compiled
+//     rustc -O --edition=2021 bench/bench.rs -o bench/.build/stats_rs   the Rust twin
+//
+// One tab-separated line per routine: name, iterations, total µs, ns per op, items one op
+// processes, ns per item, and an FNV-1a-32 hash of one canonical op's output.  The hash is
+// what makes a benchmark a VALIDATION: the interpreter, the native build and the pure-Rust
+// twin in bench/bench.rs must print the same hash for a row, or one of them is not computing
+// the routine it claims to — and only then does comparing their speeds mean anything.
+//
+// Every op takes its input from the repetition number `r`, and `r & 1` moves a radius, an
+// offset or an angle — never the amount of work — so no backend can hoist an op out of the
+// repetition loop.  Each op's result is folded into `sink`, printed on the last line.
+use mesh3d;
+
+/// One measured routine.
+struct Row {
+  name: text = "",
+  iters: integer = 0,
+  us: integer = 0,
+  px: integer = 0,
+  hash: integer = 0,
+  sink: integer = 0,
+}
+
+const FNV_OFFSET = 2166136261;
+const FNV_PRIME = 16777619;
+
+// A 128 x 128 UV sphere: 16,641 vertices and 32,768 triangles.
+const SEG = 128;
+const TRANSFORMS = 500000;
+const MULS = 100000;
+
+/// FNV-1a-32 over the low 32 bits of each integer, high byte first.
+fn fnv(h0: integer, v: const vector<integer>) -> integer {
+  fv_h = h0;
+  for x in v {
+    fv_w = x & 0xFFFFFFFF;
+    fv_h = ((fv_h ^ ((fv_w >> 24) & 255)) * FNV_PRIME) & 0xFFFFFFFF;
+    fv_h = ((fv_h ^ ((fv_w >> 16) & 255)) * FNV_PRIME) & 0xFFFFFFFF;
+    fv_h = ((fv_h ^ ((fv_w >> 8) & 255)) * FNV_PRIME) & 0xFFFFFFFF;
+    fv_h = ((fv_h ^ (fv_w & 255)) * FNV_PRIME) & 0xFFFFFFFF;
+  }
+  fv_h
+}
+
+/// A float as a hashable integer: millionths, truncated.
+fn micro(v: float) -> integer { (v * 1000000.0) as integer }
+
+fn print_row(r: const Row) {
+  pr_ns = ((r.us * 1000) / r.iters) ?? 0;
+  pr_px = if r.px > 0 { (((r.us * 1000) as float) / ((r.iters * r.px) as float)) ?? 0.0 }
+          else { 0.0 };
+  println("{r.name}\t{r.iters}\t{r.us}\t{pr_ns}\t{r.px}\t{pr_px:.3}\t{r.hash:x}");
+}
+
+// ── Building a sphere: three nested records per vertex through `add_vertex` ──
+
+fn sphere_op(r: integer) -> Mesh {
+  sphere("ball", 1.0 + ((r & 1) as float) * 0.5, SEG, SEG)
+}
+
+fn fnv_mesh(fm: const Mesh) -> integer {
+  fm_ints: vector<integer> = [];
+  for v in fm.vertices {
+    fm_ints += [micro(v.pos.x), micro(v.pos.y), micro(v.pos.z),
+                micro(v.normal.x), micro(v.normal.y), micro(v.normal.z),
+                micro(v.uv.x), micro(v.uv.y)];
+  }
+  for t in fm.triangles { fm_ints += [t.a, t.b, t.c]; }
+  fnv(FNV_OFFSET, fm_ints)
+}
+
+fn bench_sphere(n: integer) -> Row {
+  bs_t0 = ticks();
+  bs_sink = 0;
+  for r in 0..n {
+    bs_m = sphere_op(r);
+    bs_sink += len(bs_m.triangles) + micro(bs_m.vertices[1000]?.pos.x);
+  }
+  bs_us = ticks() - bs_t0;
+  bs_one = sphere_op(0);
+  Row { name: "sphere", iters: n, us: bs_us, px: len(bs_one.vertices), hash: fnv_mesh(bs_one),
+        sink: bs_sink }
+}
+
+// ── Flattening a mesh for GL: per corner an index, a null test, six nested fields ──
+
+fn fnv_singles(fs: const vector<single>) -> integer {
+  fs_ints: vector<integer> = [];
+  for s in fs { fs_ints += [micro(s as float)]; }
+  fnv(FNV_OFFSET, fs_ints)
+}
+
+fn bench_to_floats(n: integer) -> Row {
+  bf_a = sphere("even", 1.0, SEG, SEG);
+  bf_b = sphere("odd", 1.5, SEG, SEG);
+  bf_t0 = ticks();
+  bf_sink = 0;
+  for r in 0..n {
+    bf_out = if (r & 1) == 0 { mesh_to_floats(bf_a) } else { mesh_to_floats(bf_b) };
+    bf_sink += len(bf_out) + micro(bf_out[7]? as float);
+  }
+  bf_us = ticks() - bf_t0;
+  bf_one = mesh_to_floats(bf_a);
+  Row { name: "mesh_to_floats", iters: n, us: bf_us, px: len(bf_a.triangles),
+        hash: fnv_singles(bf_one), sink: bf_sink }
+}
+
+// ── A point through a matrix: a FRESH Vec3 per call, fed back as the next input ──
+
+/// A rotation about a tilted axis plus a translation: the point orbits the axis and drifts
+/// along it, so no value settles and the chain stays bounded.
+fn orbit_matrix(r: integer) -> Mat4 {
+  mat4_mul(mat4_translate(0.25 + ((r & 1) as float) * 0.125, -0.5, 0.75),
+           mat4_mul(mat4_rotate_y(0.7), mat4_rotate_x(0.3)))
+}
+
+fn transform_op(r: integer) -> vector<float> {
+  to_m = orbit_matrix(r);
+  to_p = vec3(1.0, 2.0, 3.0);
+  to_acc = 0.0;
+  for _ in 0..TRANSFORMS {
+    to_p = mat4_transform(to_m, to_p);
+    to_acc += to_p.x;
+  }
+  [to_p.x, to_p.y, to_p.z, to_acc]
+}
+
+fn fnv_floats(ff: const vector<float>) -> integer {
+  ff_ints: vector<integer> = [];
+  for f in ff { ff_ints += [micro(f)]; }
+  fnv(FNV_OFFSET, ff_ints)
+}
+
+fn bench_transform(n: integer) -> Row {
+  bt_t0 = ticks();
+  bt_sink = 0;
+  for r in 0..n { bt_sink += micro(transform_op(r)[3]?); }
+  bt_us = ticks() - bt_t0;
+  Row { name: "mat4_transform", iters: n, us: bt_us, px: TRANSFORMS,
+        hash: fnv_floats(transform_op(0)), sink: bt_sink }
+}
+
+// ── Matrix products: 64 multiply-adds indexing a vector inside a record ──
+
+fn mul_op(r: integer) -> Mat4 {
+  mo_a = mat4_mul(mat4_rotate_y(0.3 + ((r & 1) as float) * 0.01), mat4_rotate_x(0.2));
+  mo_c = mat4_identity();
+  for _ in 0..MULS { mo_c = mat4_mul(mo_a, mo_c); }
+  mo_c
+}
+
+fn bench_mul(n: integer) -> Row {
+  bm_t0 = ticks();
+  bm_sink = 0;
+  for r in 0..n { bm_sink += micro(mul_op(r).m[0]?); }
+  bm_us = ticks() - bm_t0;
+  Row { name: "mat4_mul", iters: n, us: bm_us, px: MULS, hash: fnv_floats(mul_op(0).m),
+        sink: bm_sink }
+}
+
+fn main() {
+  mn_n = 20;
+  mn_args = arguments();
+  mn_i = 0;
+  while mn_i < len(mn_args) {
+    if mn_args[mn_i]? == "--n" && mn_i + 1 < len(mn_args) {
+      mn_n = (mn_args[mn_i + 1]? as integer?)?;
+      mn_i += 1;
+    }
+    mn_i += 1;
+  }
+  if mn_n < 1 { mn_n = 1; }
+  mn_t0 = ticks();
+  println("routine\titers\tus\tns_op\tpx\tns_px\thash");
+  mn_rows: vector<Row> = [bench_to_floats(mn_n), bench_sphere(mn_n), bench_transform(mn_n),
+                          bench_mul(mn_n)];
+  mn_sink = 0;
+  for row in mn_rows {
+    print_row(row);
+    mn_sink += row.sink;
+  }
+  println("time: {(ticks() - mn_t0) / 1000}ms sink={mn_sink}");
+}
