@@ -25,10 +25,10 @@ fn blank_page(bw: integer, bh: integer) -> vector<u8> {
 fn put(pu_px: &vector<u8>, pu_stride: integer, pu_x: integer, pu_y: integer,
        pu_a: integer) {
   pu_i = (pu_y * pu_stride + pu_x) * 4;
-  pu_px[pu_i] = 200 as u8?;
-  pu_px[pu_i + 1] = 100 as u8?;
-  pu_px[pu_i + 2] = 50 as u8?;
-  pu_px[pu_i + 3] = pu_a as u8?;
+  pu_px[pu_i] = 200 as u8;
+  pu_px[pu_i + 1] = 100 as u8;
+  pu_px[pu_i + 2] = 50 as u8;
+  pu_px[pu_i + 3] = (pu_a as u8?)?;
 }
 
 fn a_cell(ac_w: integer, ac_h: integer) -> assets::Cell {
