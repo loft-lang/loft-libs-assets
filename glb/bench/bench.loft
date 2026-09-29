@@ -22,8 +22,8 @@
 // Every repetition writes one of two inputs built before the clock starts, chosen by
 // `r & 1`; the two differ in VALUE (a radius, a scale), never in the amount of work.  Each
 // op's file size is folded into `sink`, printed on the last line.
-use mesh3d;
-use glb;
+use mesh3d::*;
+use glb::*;
 
 /// One measured routine.
 struct Row {

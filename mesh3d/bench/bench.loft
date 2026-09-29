@@ -17,7 +17,7 @@
 // Every op takes its input from the repetition number `r`, and `r & 1` moves a radius, an
 // offset or an angle — never the amount of work — so no backend can hoist an op out of the
 // repetition loop.  Each op's result is folded into `sink`, printed on the last line.
-use mesh3d;
+use mesh3d::*;
 
 /// One measured routine.
 struct Row {
