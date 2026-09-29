@@ -8,8 +8,8 @@
 // hit but never miss one), and its OVERSHOOT must be bounded (or a screen-sized
 // box would satisfy containment perfectly and be useless).  Every test below is
 // one of those two.
-use assets;
-use shapes;
+use assets::*;
+use shapes::*;
 
 // A blank RGBA page, `w * h` texels, every one fully transparent.
 fn blank_page(bw: integer, bh: integer) -> vector<u8> {

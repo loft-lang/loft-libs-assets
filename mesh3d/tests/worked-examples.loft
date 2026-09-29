@@ -23,8 +23,8 @@
 // a quad wound the other way and two matrices multiplied in the other
 // order are all well-typed calls that produce a picture, just not the
 // one that was asked for.
-use mesh3d;
-use scene;
+use mesh3d::*;
+use scene::*;
 
 // Building a mesh by hand.
 //

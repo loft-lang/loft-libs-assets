@@ -1,8 +1,8 @@
 // Copyright (c) 2026 Jurjen Stellingwerff
 // SPDX-License-Identifier: LGPL-3.0-or-later
 // Tests for the scene sub-module of mesh3d.
-use mesh3d;
-use scene;
+use mesh3d::*;
+use scene::*;
 
 fn test_scene_create() {
   sc = scene::scene("test scene");

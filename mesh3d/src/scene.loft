@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
 // Scene graph types for the graphics package.
 // Represents a 3D scene with nodes, cameras, lights, and materials.
-use math;
-use mesh;
+use math::*;
+use mesh::*;
 
 // --- Materials ---
 
