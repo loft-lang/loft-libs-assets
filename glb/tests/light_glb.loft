@@ -3,8 +3,8 @@
 // Exercises the directional-light export path (glb_light_node_json), which
 // computes a quaternion from the light direction — the only place glb reads
 // Vec3 components through normalize3.  Guards that path on both backends.
-use mesh3d;
-use glb;
+use mesh3d::*;
+use glb::*;
 
 fn test_directional_light_exports() {
   dls = scene::scene("lit");

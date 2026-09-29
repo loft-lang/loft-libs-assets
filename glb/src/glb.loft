@@ -7,7 +7,7 @@
 // Pulls Mesh / Scene / Mat4 / Vec3 types from the `mesh3d` package
 // (the standalone home for those types as of 2026-05-31; previously
 // they were sub-modules inside `graphics`).
-use mesh3d;
+use mesh3d::*;
 
 // Build the float32 position buffer (3 × f32 per vertex, x y z).
 fn glb_pos_buf(verts: vector<Vertex>) -> vector<single> {

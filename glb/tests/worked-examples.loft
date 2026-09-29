@@ -21,8 +21,8 @@
 // value, no error, no null.  The only evidence a save happened is the
 // file, and the writer is happy to produce a well-formed GLB container
 // holding a glTF no reader will accept.
-use mesh3d;
-use glb;
+use mesh3d::*;
+use glb::*;
 
 // A three-vertex mesh, wound counter-clockwise, used by the examples below.
 fn one_triangle(ot_name: text) -> Mesh {

@@ -48,6 +48,6 @@
 // applies b first: the composition above scales, then translates.  Nothing here
 // touches a GPU — `glb` writes a scene out, `graphics` draws one.
 
-use math;
-use mesh;
-use scene;
+pub use math::*;
+pub use mesh::*;
+pub use scene::*;
