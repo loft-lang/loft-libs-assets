@@ -1,0 +1,175 @@
+#cwd
+// Copyright (c) 2026 Jurjen Stellingwerff
+// SPDX-License-Identifier: LGPL-3.0-or-later
+//
+// bench — the performance pass: the package's two writers, timed on a fixed workload, with
+// a hash of what they wrote.
+//
+//     loft --interpret bench/bench.loft [--n N]         the interpreter
+//     loft --native-release bench/bench.loft [--n N]    compiled
+//     rustc -O --edition=2021 bench/bench.rs -o bench/.build/stats_rs   the Rust twin
+//
+// Run it from the package directory: `#cwd` anchors the scratch files at
+// `bench/.build/`, the same place the Rust twin writes, whichever lane runs.
+//
+// One tab-separated line per routine: name, iterations, total µs, ns per op, items one op
+// processes, ns per item, and an FNV-1a-32 hash of one canonical op's output — here the
+// BYTES of the .glb file it wrote, read back once after the timed loop.  The hash is what
+// makes a benchmark a VALIDATION: the interpreter, the native build and the pure-Rust twin
+// in bench/bench.rs must print the same hash for a row, or one of them is not writing the
+// file the routine claims to — and only then does comparing their speeds mean anything.
+//
+// Every repetition writes one of two inputs built before the clock starts, chosen by
+// `r & 1`; the two differ in VALUE (a radius, a scale), never in the amount of work.  Each
+// op's file size is folded into `sink`, printed on the last line.
+use mesh3d::*;
+use glb::*;
+
+/// One measured routine.
+struct Row {
+  name: text = "",
+  iters: integer = 0,
+  us: integer = 0,
+  px: integer = 0,
+  hash: integer = 0,
+  sink: integer = 0,
+}
+
+const FNV_OFFSET = 2166136261;
+const FNV_PRIME = 16777619;
+
+// A 128 x 128 UV sphere: 16,641 vertices and 32,768 triangles.
+const SEG = 128;
+const NODES = 1000;
+const MATERIALS = 20;
+const LIGHTS = 10;
+
+/// FNV-1a-32 over bytes.
+fn fnv_bytes(h0: integer, v: const vector<u8>) -> integer {
+  fb_h = h0;
+  for b in v { fb_h = ((fb_h ^ b) * FNV_PRIME) & 0xFFFFFFFF; }
+  fb_h
+}
+
+fn print_row(r: const Row) {
+  pr_ns = ((r.us * 1000) / r.iters) ?? 0;
+  pr_px = if r.px > 0 { (((r.us * 1000) as float) / ((r.iters * r.px) as float)) ?? 0.0 }
+          else { 0.0 };
+  println("{r.name}\t{r.iters}\t{r.us}\t{pr_ns}\t{r.px}\t{pr_px:.3}\t{r.hash:x}");
+}
+
+/// A scratch path of this run, under the bench's own build directory.
+fn scratch(sc_what: text, sc_stamp: integer) -> text {
+  "bench/.build/{sc_what}_loft_{sc_stamp}.glb"
+}
+
+/// The bytes a file holds, hashed, and the file removed.
+fn hash_file(hf_path: text) -> integer {
+  hf_bytes = read_bytes(hf_path) ?? [];
+  hf_h = fnv_bytes(FNV_OFFSET, hf_bytes);
+  delete(hf_path);
+  hf_h
+}
+
+// ── One mesh: four walks of the vertices, nested field reads, a JSON header ──
+
+fn bench_save(n: integer, bs_stamp: integer) -> Row {
+  bs_a = sphere("even", 1.0, SEG, SEG);
+  bs_b = sphere("odd", 1.5, SEG, SEG);
+  bs_path = scratch("save", bs_stamp);
+  bs_t0 = ticks();
+  bs_sink = 0;
+  for r in 0..n {
+    if (r & 1) == 0 { save_glb(bs_a, bs_path); } else { save_glb(bs_b, bs_path); }
+    bs_sink += file(bs_path).size;
+  }
+  bs_us = ticks() - bs_t0;
+  save_glb(bs_a, bs_path);
+  Row { name: "save_glb", iters: n, us: bs_us, px: len(bs_a.vertices),
+        hash: hash_file(bs_path), sink: bs_sink }
+}
+
+// ── A scene: the JSON is built by `+=` of formatted pieces per node, material, light ──
+
+/// Three small meshes, twenty materials, 1,000 nodes and ten lights.  `k` scales every
+/// transform and colour, so the two scenes differ in value and in nothing else.
+fn build_scene(k: float) -> Scene {
+  bsc = scene("hall");
+  bsc.add_mesh(cube());
+  bsc.add_mesh(plane("floor", 8.0 * k, 6.0));
+  bsc.add_mesh(sphere("orb", 0.5 * k, 8, 6));
+  for mi in 0..MATERIALS {
+    mf = (mi as float) / (MATERIALS as float) ?? 0.0;
+    if (mi & 1) == 0 {
+      bsc.add_material(material_color("paint_{mi}", mf * k, 0.5, 1.0 - mf));
+    } else {
+      bsc.add_material(material_metal("metal_{mi}", 0.9, mf, 0.25 * k, 0.1 + mf * 0.5));
+    }
+  }
+  for ni in 0..NODES {
+    nf = ni as float;
+    if ni % 10 == 0 {
+      bsc.add_node(node("still_{ni}", ni % 3, ni % MATERIALS));
+    } else {
+      bsc.add_node(node_at("node_{ni}", ni % 3, ni % MATERIALS,
+                           mat4_trs(nf * 0.5 * k, (ni % 7) as float, -nf * 0.25, nf * 0.1,
+                                    k, 1.0 + (ni % 4) as float * 0.25, 2.0 - k)));
+    }
+  }
+  for li in 0..LIGHTS {
+    lf = li as float;
+    if (li & 1) == 0 {
+      bsc.add_light(point_light("lamp_{li}", 1.0, 0.8 * k, 0.6, 10.0 + lf,
+                                vec3(lf, 3.0 * k, -lf)));
+    } else if li == 1 {
+      bsc.add_light(directional_light("sun_{li}", 1.0, 1.0, 0.9, 3.0 * k, vec3(0.0, 0.0, -1.0)));
+    } else if li == 3 {
+      bsc.add_light(directional_light("sun_{li}", 1.0, 1.0, 0.9, 3.0 * k, vec3(0.0, 0.0, 1.0)));
+    } else {
+      bsc.add_light(directional_light("sun_{li}", 0.9, 1.0, 1.0, 2.0,
+                                      vec3(lf * 0.1 * k, -1.0, 0.3)));
+    }
+  }
+  bsc
+}
+
+fn bench_scene(n: integer, bn_stamp: integer) -> Row {
+  bn_a = build_scene(1.0);
+  bn_b = build_scene(1.25);
+  bn_path = scratch("scene", bn_stamp);
+  bn_t0 = ticks();
+  bn_sink = 0;
+  for r in 0..n {
+    if (r & 1) == 0 { save_scene_glb(bn_a, bn_path); } else { save_scene_glb(bn_b, bn_path); }
+    bn_sink += file(bn_path).size;
+  }
+  bn_us = ticks() - bn_t0;
+  save_scene_glb(bn_a, bn_path);
+  Row { name: "save_scene_glb", iters: n, us: bn_us, px: NODES + MATERIALS + LIGHTS,
+        hash: hash_file(bn_path), sink: bn_sink }
+}
+
+fn main() {
+  mn_n = 20;
+  mn_args = arguments();
+  mn_i = 0;
+  while mn_i < len(mn_args) {
+    if mn_args[mn_i]? == "--n" && mn_i + 1 < len(mn_args) {
+      mn_n = (mn_args[mn_i + 1]? as integer?)?;
+      mn_i += 1;
+    }
+    mn_i += 1;
+  }
+  if mn_n < 1 { mn_n = 1; }
+  mkdir_all("bench/.build");
+  mn_stamp = now();
+  mn_t0 = ticks();
+  println("routine\titers\tus\tns_op\tpx\tns_px\thash");
+  mn_rows: vector<Row> = [bench_save(mn_n, mn_stamp), bench_scene(mn_n, mn_stamp)];
+  mn_sink = 0;
+  for row in mn_rows {
+    print_row(row);
+    mn_sink += row.sink;
+  }
+  println("time: {(ticks() - mn_t0) / 1000}ms sink={mn_sink}");
+}

@@ -1,0 +1,337 @@
+// Copyright (c) 2026 Jurjen Stellingwerff
+// SPDX-License-Identifier: LGPL-3.0-or-later
+//
+// bench — the performance pass: the package's hot doors, timed on a fixed workload, with a
+// hash of what they produced.
+//
+//     loft --interpret bench/bench.loft [--n N]         the interpreter
+//     loft --native-release bench/bench.loft [--n N]    compiled
+//     rustc -O --edition=2021 bench/bench.rs -o bench/.build/stats_rs   the Rust twin
+//
+// One tab-separated line per routine: name, iterations, total µs, ns per op, items one op
+// processes, ns per item, and an FNV-1a-32 hash of one canonical op's output.  The hash is
+// what makes a benchmark a VALIDATION: the interpreter, the native build and the pure-Rust
+// twin in bench/bench.rs must print the same hash for a row, or one of them is not computing
+// the routine it claims to — and only then does comparing their speeds mean anything.
+//
+// Every op takes its input from the repetition number `r`, and `r & 1` moves a centre, a
+// cell origin, a lookup start or a byte value — never the amount of work — so no backend can
+// hoist an op out of the repetition loop.  Each op's result is folded into `sink`, printed
+// on the last line.
+use assets::*;
+
+/// One measured routine.
+struct Row {
+  name: text = "",
+  iters: integer = 0,
+  us: integer = 0,
+  px: integer = 0,
+  hash: integer = 0,
+  sink: integer = 0,
+}
+
+const FNV_OFFSET = 2166136261;
+const FNV_PRIME = 16777619;
+
+// The metadata pack: 40 pages, 200 cells and definitions, 5,000 placed instances (4,000 in
+// the scene asked about, 1,000 in one the walk skips), and a 10,000-row animation table.
+const PAGES = 40;
+const DEFS = 200;
+const LEVEL = 4000;
+const ATTIC = 1000;
+const FACINGS = 5;
+const LOOKUPS = 200000;
+
+// The texture page: 25 x 20 cells of 64 x 64, two spare columns so a cell shifted by one
+// texel stays on the page.
+const CELL = 64;
+const CELLS_X = 25;
+const CELLS_Y = 20;
+const PAGE_W = 1602;
+const PROXY_CELLS = 200;
+const COUNT_CELLS = 500;
+
+// The bulk store: 5,000 blobs of 8 KiB.
+const BLOBS = 5000;
+const BLOB_BYTES = 8192;
+
+/// FNV-1a-32 over the low 32 bits of each integer, high byte first.
+fn fnv(h0: integer, v: const vector<integer>) -> integer {
+  fv_h = h0;
+  for x in v {
+    fv_w = x & 0xFFFFFFFF;
+    fv_h = ((fv_h ^ ((fv_w >> 24) & 255)) * FNV_PRIME) & 0xFFFFFFFF;
+    fv_h = ((fv_h ^ ((fv_w >> 16) & 255)) * FNV_PRIME) & 0xFFFFFFFF;
+    fv_h = ((fv_h ^ ((fv_w >> 8) & 255)) * FNV_PRIME) & 0xFFFFFFFF;
+    fv_h = ((fv_h ^ (fv_w & 255)) * FNV_PRIME) & 0xFFFFFFFF;
+  }
+  fv_h
+}
+
+/// FNV-1a-32 over the bytes of a text.
+fn fnv_text(h0: integer, t: text) -> integer {
+  ft_h = h0;
+  for i in 0..size(t) { ft_h = ((ft_h ^ t.byte_at(i)) * FNV_PRIME) & 0xFFFFFFFF; }
+  ft_h
+}
+
+/// A float as a hashable integer: millionths, truncated.
+fn micro(v: float) -> integer { (v * 1000000.0) as integer }
+
+fn print_row(r: const Row) {
+  pr_ns = ((r.us * 1000) / r.iters) ?? 0;
+  pr_px = if r.px > 0 { (((r.us * 1000) as float) / ((r.iters * r.px) as float)) ?? 0.0 }
+          else { 0.0 };
+  println("{r.name}\t{r.iters}\t{r.us}\t{pr_ns}\t{r.px}\t{pr_px:.3}\t{r.hash:x}");
+}
+
+// ── The metadata pack ───────────────────────────────────────────────
+
+fn action_names() -> vector<text> {
+  ["idle", "walk", "run", "jump", "fall", "attack", "hurt", "die", "cast", "block"]
+}
+
+/// Every tenth definition is a light (no cell), and every twenty-fifth names a cell the
+/// pack does not hold, so each `continue` in `keys_near` has instances to act on.
+fn build_pack() -> Pack {
+  bp = new_pack();
+  for pg in 0..PAGES {
+    bp.pages += [PageInfo { pi_name: "page_{pg}", pi_w: 256, pi_h: 256, pi_blob: "blob_{pg}" }];
+  }
+  for c in 0..DEFS {
+    bp.cells += [Cell { ce_key: "cell_{c}", ce_page: "page_{(c * 7) % PAGES}",
+                        ce_x: 0, ce_y: 0, ce_w: 16, ce_h: 16 }];
+  }
+  for d in 0..DEFS {
+    if d % 10 == 9 {
+      bp.defs += [Def { df_name: "def_{d}", df_kind: Light, df_radius: 96.0 }];
+    } else if d % 25 == 13 {
+      bp.defs += [Def { df_name: "def_{d}", df_cell: "gone_{d}" }];
+    } else {
+      bp.defs += [Def { df_name: "def_{d}", df_cell: "cell_{d}" }];
+    }
+  }
+  for i in 0..ATTIC {
+    bp.placed += [Placed { pd_scene: "attic", pd_order: i, pd_def: "def_{(i * 13) % DEFS}",
+                           pd_x: ((i * 31) % 1000) as float, pd_y: ((i * 17) % 1000) as float }];
+  }
+  for i in 0..LEVEL {
+    bp.placed += [Placed { pd_scene: "level", pd_order: i, pd_def: "def_{(i * 37) % DEFS}",
+                           pd_x: ((i * 97) % 1000) as float, pd_y: ((i * 61) % 1000) as float }];
+  }
+  bp_acts = action_names();
+  for d in 0..DEFS {
+    for a in bp_acts {
+      for f in 0..FACINGS {
+        bp.anims += [Anim { an_key: "def_{d}/{a}/{f}", an_def: "def_{d}", an_action: a,
+                            an_facing: f, an_seq: "def_{d}_{a}_{f}" }];
+      }
+    }
+  }
+  bp
+}
+
+// ── Which blobs a scene draws from: an index walk, three hash lookups, a dedup ──
+
+fn bench_keys(n: integer, bk_p: const Pack) -> Row {
+  bk_t0 = ticks();
+  bk_sink = 0;
+  for r in 0..n {
+    bk_out = keys_near(bk_p, "level", 500.0 + ((r & 1) as float), 500.0, 350.0);
+    bk_sink += len(bk_out);
+  }
+  bk_us = ticks() - bk_t0;
+  bk_one = keys_near(bk_p, "level", 500.0, 500.0, 350.0);
+  bk_h = FNV_OFFSET;
+  for k in bk_one { bk_h = fnv_text(bk_h, k); }
+  Row { name: "keys_near", iters: n, us: bk_us, px: LEVEL + ATTIC, hash: bk_h, sink: bk_sink }
+}
+
+// ── The animation table: every lookup formats its composite key first ──
+
+fn anim_op(ao_p: const Pack, ao_defs: const vector<text>, ao_acts: const vector<text>,
+           r: integer) -> vector<integer> {
+  ao_len = 0;
+  ao_hits = 0;
+  for i in 0..LOOKUPS {
+    ao_j = i + (r & 1);
+    // Facing 5 is one the table does not hold: one lookup in six misses.
+    ao_s = anim_of(ao_p, ao_defs[ao_j % DEFS]?, ao_acts[(ao_j / DEFS) % 10]?, (ao_j * 7) % 6);
+    ao_len += len(ao_s) * ((i & 7) + 1);
+    if ao_s != "" { ao_hits += 1; }
+  }
+  [ao_len, ao_hits]
+}
+
+fn bench_anim(n: integer, ba_p: const Pack) -> Row {
+  ba_defs: vector<text> = [];
+  for d in 0..DEFS { ba_defs += ["def_{d}"]; }
+  ba_acts = action_names();
+  ba_t0 = ticks();
+  ba_sink = 0;
+  for r in 0..n { ba_sink += anim_op(ba_p, ba_defs, ba_acts, r)[0]?; }
+  ba_us = ticks() - ba_t0;
+  Row { name: "anim_of", iters: n, us: ba_us, px: LOOKUPS,
+        hash: fnv(FNV_OFFSET, anim_op(ba_p, ba_defs, ba_acts, 0)), sink: ba_sink }
+}
+
+// ── The bulk store: a record carrying 8 KiB inserted under a text key ──
+
+fn blob_fill(bf_keys: const vector<text>, bf_bytes: const vector<u8>) -> hash<Blob[bl_key]> {
+  bf_b: hash<Blob[bl_key]> = [];
+  for i in 0..BLOBS { blob_put(bf_b, bf_keys[i]?, Rgba, bf_bytes); }
+  bf_b
+}
+
+/// Order-independent: the sum of one hash per entry, over its key, its length and three of
+/// its bytes.
+fn blob_hash(bh_b: const hash<Blob[bl_key]>) -> integer {
+  bh_sum = 0;
+  for e in bh_b {
+    bh_e = fnv_text(FNV_OFFSET, e.bl_key);
+    bh_e = fnv(bh_e, [len(e.bl_bytes), e.bl_bytes[0]?, e.bl_bytes[4095]?, e.bl_bytes[8191]?]);
+    bh_sum = (bh_sum + bh_e) & 0xFFFFFFFF;
+  }
+  bh_sum
+}
+
+fn blob_bytes(bb_salt: integer) -> vector<u8> {
+  bb_v: vector<u8> = [];
+  for i in 0..BLOB_BYTES { bb_v += [(((i * 31 + bb_salt) & 255) as u8?)?]; }
+  bb_v
+}
+
+fn bench_blob(n: integer) -> Row {
+  bl_keys: vector<text> = [];
+  for i in 0..BLOBS { bl_keys += ["blob_{i}"]; }
+  bl_even = blob_bytes(0);
+  bl_odd = blob_bytes(1);
+  bl_t0 = ticks();
+  bl_sink = 0;
+  for r in 0..n {
+    bl_b = if (r & 1) == 0 { blob_fill(bl_keys, bl_even) } else { blob_fill(bl_keys, bl_odd) };
+    bl_sink += len(bl_b["blob_7"]?.bl_bytes);
+  }
+  bl_us = ticks() - bl_t0;
+  Row { name: "blob_put", iters: n, us: bl_us, px: BLOBS,
+        hash: blob_hash(blob_fill(bl_keys, bl_even)), sink: bl_sink }
+}
+
+// ── The texture page: an ellipse per cell with an antialiased fringe ──
+
+/// The alpha the page holds at `(x, y)`.  Cell `k`'s ellipse has its own radii; its fringe
+/// alphas straddle the proxy threshold; every third cell carries a diagonal stroke too.
+fn page_alpha(x: integer, y: integer) -> integer {
+  if x >= CELLS_X * CELL { return 0 }
+  pa_k = (y / CELL) * CELLS_X + x / CELL;
+  pa_lx = x % CELL;
+  pa_ly = y % CELL;
+  if pa_k % 3 == 0 && pa_lx - pa_ly < 2 && pa_ly - pa_lx < 2 { return 200 }
+  pa_rx = 8 + (pa_k * 7) % 22;
+  pa_ry = 8 + (pa_k * 11) % 22;
+  pa_dx = pa_lx - 32;
+  pa_dy = pa_ly - 32;
+  pa_q = (pa_dx * pa_dx * 100 / (pa_rx * pa_rx) ?? 0) + (pa_dy * pa_dy * 100 / (pa_ry * pa_ry) ?? 0);
+  if pa_q < 90 { return 255 }
+  if pa_q < 120 { return (pa_q * 5 + pa_k) % 16 }
+  0
+}
+
+fn build_page() -> vector<u8> {
+  bg_h = CELLS_Y * CELL;
+  bg_px: vector<u8> = [0 as u8; PAGE_W * bg_h * 4];
+  for y in 0..bg_h {
+    for x in 0..PAGE_W {
+      bg_px[(y * PAGE_W + x) * 4 + 3] = (page_alpha(x, y) as u8?)?;
+    }
+  }
+  bg_px
+}
+
+fn build_cells(bc_shift: integer) -> vector<Cell> {
+  bc_out: vector<Cell> = [];
+  for k in 0..(CELLS_X * CELLS_Y) {
+    bc_out += [Cell { ce_key: "c{k}", ce_page: "atlas", ce_x: (k % CELLS_X) * CELL + bc_shift,
+                      ce_y: (k / CELLS_X) * CELL, ce_w: CELL, ce_h: CELL }];
+  }
+  bc_out
+}
+
+/// Every proxy box of the first 200 cells, flattened.
+fn proxy_op(po_cells: const vector<Cell>, po_page: const PageInfo,
+            po_px: const vector<u8>) -> vector<float> {
+  po_out: vector<float> = [];
+  for c in po_cells {
+    if c#index >= PROXY_CELLS { break }
+    for b in cell_proxy(c, po_page, po_px) { po_out += [b.rx, b.ry, b.rw, b.rh]; }
+  }
+  po_out
+}
+
+fn bench_proxy(n: integer, bp_page: const PageInfo, bp_px: const vector<u8>,
+               bp_even: const vector<Cell>, bp_odd: const vector<Cell>) -> Row {
+  bp_t0 = ticks();
+  bp_sink = 0;
+  for r in 0..n {
+    bp_out = if (r & 1) == 0 { proxy_op(bp_even, bp_page, bp_px) }
+             else { proxy_op(bp_odd, bp_page, bp_px) };
+    bp_sink += len(bp_out);
+  }
+  bp_us = ticks() - bp_t0;
+  bp_ints: vector<integer> = [];
+  for f in proxy_op(bp_even, bp_page, bp_px) { bp_ints += [micro(f)]; }
+  Row { name: "cell_proxy", iters: n, us: bp_us, px: PROXY_CELLS, hash: fnv(FNV_OFFSET, bp_ints),
+        sink: bp_sink }
+}
+
+/// The opaque-texel count of every cell on the page.
+fn count_op(co_cells: const vector<Cell>, co_page: const PageInfo,
+            co_px: const vector<u8>) -> vector<integer> {
+  co_out: vector<integer> = [];
+  for c in co_cells { co_out += [opaque_texels(co_px, co_page, c)]; }
+  co_out
+}
+
+fn bench_count(n: integer, bo_page: const PageInfo, bo_px: const vector<u8>,
+               bo_even: const vector<Cell>, bo_odd: const vector<Cell>) -> Row {
+  bo_t0 = ticks();
+  bo_sink = 0;
+  for r in 0..n {
+    bo_out = if (r & 1) == 0 { count_op(bo_even, bo_page, bo_px) }
+             else { count_op(bo_odd, bo_page, bo_px) };
+    bo_sink += bo_out[3]?;
+  }
+  bo_us = ticks() - bo_t0;
+  Row { name: "opaque_texels", iters: n, us: bo_us, px: COUNT_CELLS,
+        hash: fnv(FNV_OFFSET, count_op(bo_even, bo_page, bo_px)), sink: bo_sink }
+}
+
+fn main() {
+  mn_n = 20;
+  mn_args = arguments();
+  mn_i = 0;
+  while mn_i < len(mn_args) {
+    if mn_args[mn_i]? == "--n" && mn_i + 1 < len(mn_args) {
+      mn_n = (mn_args[mn_i + 1]? as integer?)?;
+      mn_i += 1;
+    }
+    mn_i += 1;
+  }
+  if mn_n < 1 { mn_n = 1; }
+  mn_pack = build_pack();
+  mn_page = PageInfo { pi_name: "atlas", pi_w: PAGE_W, pi_h: CELLS_Y * CELL, pi_blob: "atlas" };
+  mn_px = build_page();
+  mn_even = build_cells(0);
+  mn_odd = build_cells(1);
+  mn_t0 = ticks();
+  println("routine\titers\tus\tns_op\tpx\tns_px\thash");
+  mn_rows: vector<Row> = [bench_keys(mn_n, mn_pack), bench_proxy(mn_n, mn_page, mn_px, mn_even, mn_odd),
+                          bench_anim(mn_n, mn_pack), bench_blob(mn_n),
+                          bench_count(mn_n, mn_page, mn_px, mn_even, mn_odd)];
+  mn_sink = 0;
+  for row in mn_rows {
+    print_row(row);
+    mn_sink += row.sink;
+  }
+  println("time: {(ticks() - mn_t0) / 1000}ms sink={mn_sink}");
+}
