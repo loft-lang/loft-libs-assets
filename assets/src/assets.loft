@@ -478,8 +478,8 @@ pub fn proxy_overshoot(po_boxes: const vector<shapes::Rect>, po_solid: integer) 
 pub fn texels(words: const vector<integer>) -> vector<u8> {
   tx_out: vector<u8> = [];
   for w in words {
-    tx_out += [((w >> 16) & 255) as u8?, ((w >> 8) & 255) as u8?,
-               (w & 255) as u8?, ((w >> 24) & 255) as u8?];
+    tx_out += [((w >> 16) & 255) as u8, ((w >> 8) & 255) as u8,
+               (w & 255) as u8, ((w >> 24) & 255) as u8];
   }
   tx_out
 }
