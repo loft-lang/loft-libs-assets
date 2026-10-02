@@ -1,0 +1,97 @@
+// Copyright (c) 2026 Jurjen Stellingwerff
+// SPDX-License-Identifier: LGPL-3.0-or-later
+// @NAME: Getting Started
+// @TITLE: Write a mesh or a whole scene to a .glb file, and check the file, because the save answers nothing.
+//
+// `glb` writes a `mesh3d` `Mesh` or `Scene` as a glTF 2.0 binary (`.glb`) that Blender,
+// three.js and gltf-validator open: positions, normals and texture coordinates, indexed
+// triangles, PBR materials, node transforms and punctual lights.
+//
+// It only writes. It does not read a `.glb` back, draw anything, or convert other formats —
+// and it writes no cameras: a `Scene`'s cameras stay in the scene. The types it writes are
+// `mesh3d`'s; drawing them is `graphics`' job.
+use mesh3d::*;
+use glb::*;
+
+fn out_path(name: text) -> text { "{temp_dir() ?? "."}/loft_glb_guide_{name}.glb" }
+
+// The three header words every GLB starts with: magic, version, total length.
+fn header(path: text) -> (integer, integer, integer) {
+  f = file(path);
+  f#format = LittleEndian;
+  magic = (f#read(4) as i32) as integer;
+  version = (f#read(4) as i32) as integer;
+  total = (f#read(4) as i32) as integer;
+  (magic, version, total)
+}
+
+fn main() {
+  path = out_path("cube");
+  glb::save_glb(cube(), path);
+  h = header(path);
+  println("cube    : {file(path).size} bytes, version {h.1}");
+  assert(h.0 == 0x46546C67, "the file starts with 'glTF'");
+  assert(h.2 == file(path).size, "and its header states its own size");
+  _ = delete(path);
+
+  // Every section below is a function, and `main` calls each one: a section nothing calls
+  // still compiles, but its assertions never run.
+  the_save_answers_nothing();
+  a_scene_carries_what_a_mesh_cannot();
+}
+
+// That prints:
+//
+//     cube    : 1788 bytes, version 2
+//
+// ## The one that bites: the save answers nothing
+//
+// `save_glb(mesh, path)` and `save_scene_glb(scene, path)` are statements: no boolean, no
+// error, no null. The only evidence a save happened is the file — so a program that needs to
+// know looks at it, as `main` does above: it exists, it starts with `glTF`, and the length in
+// its header is its real size. A save truncates first, so saving one path twice replaces the
+// file rather than growing it.
+
+fn the_save_answers_nothing() {
+  path = out_path("twice");
+  glb::save_glb(cube(), path);
+  once = file(path).size;
+  glb::save_glb(cube(), path);
+  assert(file(path).size == once, "a second save replaced the file");
+  _ = delete(path);
+  println("save    : no answer, so check the file; a re-save replaces it");
+}
+
+// ## A scene carries what a mesh cannot
+//
+// `save_glb` writes one mesh and nothing else: no material, no transform, no light — the
+// object arrives grey, at the origin, unlit. `save_scene_glb` is the door that carries them:
+// every mesh, every material, every node with its transform, and the lights through the
+// KHR_lights_punctual extension.
+
+fn a_scene_carries_what_a_mesh_cannot() {
+  sc = scene("hall");
+  box = sc.add_mesh(cube());
+  brass = sc.add_material(material_color("brass", 0.8, 0.6, 0.2));
+  sc.add_node(node_at("crate", box, brass, mat4_translate(0.0, 1.0, 0.0)));
+  sc.add_light(directional_light("sun", 1.0, 1.0, 0.9, 3.0, vec3(0.0, -1.0, 0.0)));
+  path = out_path("scene");
+  glb::save_scene_glb(sc, path);
+  f = file(path);
+  f#format = LittleEndian;
+  _ = f#read(12);
+  json_len = (f#read(4) as i32) as integer;
+  _ = f#read(4);
+  json = f#read(json_len) as text;
+  assert(json.contains("\"brass\""), "the material is in the file");
+  assert(json.contains("KHR_lights_punctual") && json.contains("\"sun\""), "and the light");
+  assert(json.contains("\"matrix\""), "and the node's transform");
+  _ = delete(path);
+  println("scene   : materials, transforms and lights travel with save_scene_glb");
+}
+
+// ## Where to go next
+//
+// - `README.md` — the four contracts a signature does not carry, each linked to its test.
+// - `tests/worked-examples.loft` — `@GLB-001` … `@GLB-004`, including the out-of-range index
+//   and the empty mesh that both write a well-formed container around an invalid glTF.

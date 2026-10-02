@@ -4,9 +4,8 @@
 // Exports a Mesh or Scene as a GLB 2.0 file readable by Blender, three.js, and gltf-validator.
 // Format reference: https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html
 //
-// Pulls Mesh / Scene / Mat4 / Vec3 types from the `mesh3d` package
-// (the standalone home for those types as of 2026-05-31; previously
-// they were sub-modules inside `graphics`).
+// Writes the Mesh / Scene / Mat4 / Vec3 types of the `mesh3d` package.  A scene's
+// cameras are not written.
 use mesh3d::*;
 
 // Build the float32 position buffer (3 × f32 per vertex, x y z).

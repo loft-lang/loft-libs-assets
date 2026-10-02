@@ -15,16 +15,16 @@ glTF 2.0 consumer.
 
 ## Surface
 
-- `save_glb(m: mesh::Mesh, path: text)` — write a single mesh as a
+- `save_glb(m: mesh3d::Mesh, path: text)` — write a single mesh as a
   GLB scene with one node + one mesh.
-- `save_scene_glb(sc: scene::Scene, path: text)` — write a full
-  scene (multiple meshes, materials, lights, camera nodes,
-  transforms) as a GLB.
+- `save_scene_glb(sc: mesh3d::Scene, path: text)` — write a full
+  scene (multiple meshes, materials, node transforms, lights) as a
+  GLB.  A scene's cameras are not written.
 
-Output format: glTF 2.0 binary spec, JSON chunk + BIN chunk, RGB
+Output format: glTF 2.0 binary spec, JSON chunk + BIN chunk, float32
 positions + normals + UVs, indexed triangles, pbrMetallicRoughness
-materials, directional + point lights via the glTF light extension
-convention.
+materials, and directional / point / spot lights through the
+`KHR_lights_punctual` extension.  A guide: [docs/01-getting-started.loft](docs/01-getting-started.loft).
 
 ## The four contracts a signature does not carry
 
@@ -60,8 +60,6 @@ for:
 
 ## Provenance
 
-Extracted from the loft monorepo's `lib/graphics/src/glb.loft`
-(via the registry-shipped graphics 0.1.0) on 2026-05-31 as part of
-[@PLAN12 W.0b](https://github.com/jjstwerff/loft/blob/main/doc/claude/LAVITION.md).
-Previously a submodule inside `graphics`; promoted to a standalone
-package so non-rendering consumers don't need to install OpenGL.
+A standalone package, so a consumer that writes `.glb` files does not need
+`graphics`' OpenGL stack — see
+[LAVITION.md](https://github.com/loft-lang/loft/blob/main/doc/claude/LAVITION.md).
