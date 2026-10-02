@@ -1,0 +1,107 @@
+// Copyright (c) 2026 Jurjen Stellingwerff
+// SPDX-License-Identifier: LGPL-3.0-or-later
+// @NAME: Getting Started
+// @TITLE: Vectors, column-major matrices, meshes built by index, and a scene of shared parts.
+//
+// `mesh3d` is 3D geometry as plain data: `Vec2` / `Vec3` / `Vec4` and a column-major `Mat4`
+// with the operations a renderer needs, a `Mesh` of vertices and triangles that index them,
+// and a `Scene` that pairs meshes and materials through nodes with transforms.
+//
+// It touches no GPU and writes no files. `graphics` draws a mesh, `glb` writes a scene to a
+// `.glb` that Blender or three.js open, and both read the types defined here — which is why
+// they live in a package of their own.
+use mesh3d::*;
+
+fn main() {
+  floats = mesh_to_floats(cube());
+  println("cube    : {len(floats)} floats for GL, {len(cube().triangles)} triangles");
+  assert(len(floats) == 216, "12 triangles x 3 vertices x 6 floats (position, normal)");
+
+  // Every section below is a function, and `main` calls each one: a section nothing calls
+  // still compiles, but its assertions never run.
+  composition_order();
+  a_mesh_is_built_by_index();
+  a_scene_shares_by_index();
+  the_camera_field_is_in_degrees();
+}
+
+// That prints:
+//
+//     cube    : 216 floats for GL, 12 triangles
+//
+// `mesh_to_floats` expands every triangle into its three vertices, position then normal, so
+// the buffer goes to a GL upload as it is. `mesh_to_floats_uv` adds the two texture
+// coordinates, eight floats per vertex.
+//
+// ## The one that bites: `mat4_mul(a, b)` applies `b` first
+//
+// Matrices are column-major, as OpenGL and glTF store them, and a product applies its RIGHT
+// operand first. So `mat4_mul(mat4_translate(…), mat4_scale(…))` SCALES and then translates —
+// the usual order for placing an object — and swapping the operands moves the object by a
+// scaled distance instead.
+
+fn composition_order() {
+  scale_then_move = mat4_mul(mat4_translate(0.0, 1.0, 0.0), mat4_scale(2.0, 2.0, 2.0));
+  move_then_scale = mat4_mul(mat4_scale(2.0, 2.0, 2.0), mat4_translate(0.0, 1.0, 0.0));
+  p = mat4_transform(scale_then_move, vec3(1.0, 0.0, 0.0));
+  q = mat4_transform(move_then_scale, vec3(1.0, 0.0, 0.0));
+  assert(p.x == 2.0 && p.y == 1.0, "scaled to 2, then lifted by 1");
+  assert(q.x == 2.0 && q.y == 2.0, "lifted by 1, then the lift scaled too");
+  println("order   : mat4_mul(a, b) applies b first");
+}
+
+// ## A mesh is built by index
+//
+// `add_vertex` answers the index of the vertex it added, and `add_triangle` takes three of
+// those indices. A vertex two faces share is added once and named twice — and the indices are
+// not checked, so an index past the last vertex is a mesh some consumer will misread.
+
+fn a_mesh_is_built_by_index() {
+  m = mesh("quad");
+  up = vec3(0.0, 1.0, 0.0);
+  a = m.add_vertex(vertex(vec3(0.0, 0.0, 0.0), up, vec2(0.0, 0.0)));
+  b = m.add_vertex(vertex(vec3(1.0, 0.0, 0.0), up, vec2(1.0, 0.0)));
+  c = m.add_vertex(vertex(vec3(1.0, 0.0, 1.0), up, vec2(1.0, 1.0)));
+  d = m.add_vertex(vertex(vec3(0.0, 0.0, 1.0), up, vec2(0.0, 1.0)));
+  m.add_triangle(a, b, c);
+  m.add_triangle(a, c, d);
+  assert(len(m.vertices) == 4 && len(m.triangles) == 2, "four vertices, two triangles sharing two");
+  assert(len(mesh_to_floats_uv(m)) == 48, "but the GL buffer expands them: 6 vertices x 8 floats");
+  println("mesh    : 4 vertices, 2 triangles, 48 floats with UVs");
+}
+
+// ## A scene shares by index
+//
+// A scene holds three index spaces — meshes, materials, nodes — and every `add_*` answers the
+// index the rest of the scene names that thing by. A node pairs one mesh and one material with
+// a transform, so two crates are two nodes naming the same mesh, never two copies of it.
+
+fn a_scene_shares_by_index() {
+  sc = scene("hall");
+  box = sc.add_mesh(cube());
+  brass = sc.add_material(material_color("brass", 0.8, 0.6, 0.2));
+  sc.add_node(node_at("crate a", box, brass, mat4_translate(-1.0, 0.0, 0.0)));
+  sc.add_node(node_at("crate b", box, brass, mat4_translate(1.0, 0.0, 0.0)));
+  assert(len(sc.meshes) == 1 && len(sc.nodes) == 2, "one mesh, placed twice");
+  println("scene   : one mesh, two nodes naming it");
+}
+
+// ## The camera's field is in degrees
+//
+// `camera` stores its vertical field of view in DEGREES (60 by default), while
+// `mat4_perspective` takes RADIANS — and nothing between them converts. A camera is data here:
+// the code that builds the projection owns the conversion.
+
+fn the_camera_field_is_in_degrees() {
+  cam = camera("main");
+  proj = mat4_perspective(cam.fov * PI / 180.0, 16.0 / 9.0, cam.near, cam.far);
+  assert(cam.fov == 60.0, "degrees");
+  assert(proj.m[0] > 0.9 && proj.m[0] < 1.0, "a 60 degree field over 16:9 gives about 0.97");
+  println("camera  : fov in degrees, perspective in radians");
+}
+
+// ## Where to go next
+//
+// - `tests/worked-examples.loft` — `@MSH-001` … `@MSH-005`: building a mesh, flattening it
+//   for GL, planes and quads, composing transforms, and the zero-length normal.
+// - `glb` — writing a scene to a `.glb` file; `graphics` — drawing a mesh.

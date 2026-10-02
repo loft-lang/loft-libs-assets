@@ -21,7 +21,9 @@ Aggregates three sub-modules in one package:
 - `scene` — `Scene` / `Node` / `Material` / `Camera` / `Light` +
   scene-graph constructors.
 
-Consumers do `use mesh3d;` to get all the above types at the top level.
+`use mesh3d;` reaches them qualified (`mesh3d::Vec3`, `mesh3d::cube()`), and
+`use mesh3d::*;` brings the names in bare.  A guide:
+[docs/01-getting-started.loft](docs/01-getting-started.loft).
 
 ## The five contracts a signature does not carry
 

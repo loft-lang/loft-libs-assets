@@ -78,6 +78,8 @@ pub fn node_at(nn: text, nm: integer, nmat: integer, xf: math::Mat4) -> Node {
 
 // --- Camera ---
 
+// A camera as data: where it stands, what it looks at, its vertical field in
+// DEGREES and its clipping planes.  `camera` below builds one with defaults.
 pub struct Camera {
   name: text,
   fov: float,
@@ -106,8 +108,12 @@ pub fn camera(cname: text) -> Camera {
 
 // --- Lights (KHR_lights_punctual) ---
 
+// Which kind a `Light` is.  `directional_light` and `point_light` build the first
+// two; a `Spot` is written by setting `light_type` on a `Light` directly.
 pub enum LightType { Directional, Point, Spot }
 
+// A punctual light (glTF's KHR_lights_punctual): its kind, colour, intensity, and
+// the position or direction the kind uses.
 pub struct Light {
   name: text,
   light_type: LightType,

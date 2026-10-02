@@ -126,7 +126,8 @@ pub fn plane(pn: text, pw: float, pd: float) -> Mesh {
 
 // Create a UV sphere centered at origin.
 // sr = radius, ss = longitudinal slices (≥3), st = latitudinal stacks (≥2).
-// Produces (ss+1)*(st+1) vertices and ss*st*2 triangles.
+// Produces (ss+1)*(st+1) vertices and ss*st*2 triangles.  Fewer slices or stacks
+// are not refused: they build that many, a flat or degenerate solid.
 pub fn sphere(sn: text, sr: float, ss: integer, st: integer) -> Mesh {
   sm = mesh(sn);
   pi2 = 6.283185307179586;  // 2 * pi

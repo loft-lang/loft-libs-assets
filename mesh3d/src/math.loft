@@ -128,7 +128,8 @@ pub fn mat4_translate(tx: float, ty: float, tz: float) -> Mat4 {
   ] }
 }
 
-// Create a uniform scale matrix.
+// Create a scale matrix: `sx`, `sy`, `sz` scale each axis on its own, so equal
+// values scale uniformly.
 pub fn mat4_scale(sx: float, sy: float, sz: float) -> Mat4 {
   Mat4 { m: [
     sx,  0.0, 0.0, 0.0,
