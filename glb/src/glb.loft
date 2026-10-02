@@ -262,6 +262,13 @@ fn glb_light_node_json(lt: Light, li: integer) -> text {
       qw = (half * inv_len) as single;
     }
     result += ",\"rotation\":[{qx:.6},{qy:.6},{qz:.6},{qw:.6}]";
+    // A spot has a place as well as a direction; a directional light has only the direction.
+    if lt.light_type == Spot {
+      sx = lt.position.x as single;
+      sy = lt.position.y as single;
+      sz = lt.position.z as single;
+      result += ",\"translation\":[{sx:.6},{sy:.6},{sz:.6}]";
+    }
   }
   result += "}}";
   result
@@ -314,7 +321,9 @@ fn glb_scene_json(sc: Scene, bin_offset: vector<integer>) -> text {
       } else if lt.light_type == Directional {
         result += "{{\"name\":\"{ltname}\",\"type\":\"directional\",\"color\":[{cr:.6},{cg:.6},{cb:.6}],\"intensity\":{inten:.6}}}";
       } else {
-        result += "{{\"name\":\"{ltname}\",\"type\":\"spot\",\"color\":[{cr:.6},{cg:.6},{cb:.6}],\"intensity\":{inten:.6}}}";
+        // KHR_lights_punctual REQUIRES `spot` on a spot light; `Light` carries no cone, so
+        // the spec's own defaults (inner 0, outer pi/4) are written.
+        result += "{{\"name\":\"{ltname}\",\"type\":\"spot\",\"color\":[{cr:.6},{cg:.6},{cb:.6}],\"intensity\":{inten:.6},\"spot\":{{\"innerConeAngle\":0.0,\"outerConeAngle\":0.785398}}}}";
       }
       li = li + 1;
     }

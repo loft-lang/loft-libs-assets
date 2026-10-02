@@ -23,3 +23,26 @@ fn test_point_light_exports() {
   assert(file("test_point_light.glb").size > 0, "point-light scene exported");
   delete("test_point_light.glb");
 }
+
+// A spot light carries the `spot` object KHR_lights_punctual requires for that type (the spec's
+// default cone, as `Light` has none), and its node both its place and its direction.
+fn test_spot_light_exports_valid_gltf() {
+  sps = scene::scene("spotlit");
+  sps.add_mesh(mesh::cube());
+  sps.add_light(scene::Light {
+    name: "torch", light_type: Spot, color_r: 1.0, color_g: 1.0, color_b: 1.0, intensity: 5.0,
+    position: math::vec3(1.0, 2.0, 3.0), direction: math::vec3(0.0, -1.0, 0.0)
+  });
+  glb::save_scene_glb(sps, "test_spot_light.glb");
+  f = file("test_spot_light.glb");
+  f#format = LittleEndian;
+  _ = f#read(12);
+  jlen = (f#read(4) as i32) as integer;
+  _ = f#read(4);
+  json = f#read(jlen) as text;
+  assert(json.contains("\"type\":\"spot\""), "a spot light");
+  assert(json.contains("\"spot\":{{\"innerConeAngle\":0.0,\"outerConeAngle\":0.785398}}"), "with its required cone");
+  assert(json.contains("\"translation\":[1.000000,2.000000,3.000000]"), "placed where the light is");
+  assert(json.contains("\"rotation\":["), "and turned the way it points");
+  delete("test_spot_light.glb");
+}

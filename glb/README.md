@@ -24,7 +24,8 @@ glTF 2.0 consumer.
 Output format: glTF 2.0 binary spec, JSON chunk + BIN chunk, float32
 positions + normals + UVs, indexed triangles, pbrMetallicRoughness
 materials, and directional / point / spot lights through the
-`KHR_lights_punctual` extension.  A guide: [docs/01-getting-started.loft](docs/01-getting-started.loft).
+`KHR_lights_punctual` extension (a spot light with the extension's default
+cone, as `mesh3d`'s `Light` carries none).  A guide: [docs/01-getting-started.loft](docs/01-getting-started.loft).
 
 ## The four contracts a signature does not carry
 
