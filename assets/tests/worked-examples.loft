@@ -1,0 +1,78 @@
+// Copyright (c) 2026 Jurjen Stellingwerff
+// SPDX-License-Identifier: LGPL-3.0-or-later
+//
+// Worked examples for `assets` (@PLN141): each `test_*` is a running demonstration of a
+// contract the signatures cannot state, cited from the function it explains with
+// `// Example: @PAK-00N`.
+use assets::*;
+
+fn base_for(name: text) -> text { "{temp_dir() ?? "."}/loft_assets_example_{name}" }
+
+fn clean(base: text) {
+  for f in [meta_path(base), blobs_path(base), "{meta_path(base)}.dschema", "{blobs_path(base)}.dschema"] {
+    if file(f).exists() { _ = delete(f); }
+  }
+}
+
+fn small_pack(p: Pack, blobs: &hash<Blob[bl_key]>) {
+  p.pages += [PageInfo { pi_name: "mobs", pi_w: 4, pi_h: 2, pi_blob: "page/mobs" }];
+  p.cells += [Cell { ce_key: "goblin", ce_page: "mobs", ce_x: 0, ce_y: 0, ce_w: 2, ce_h: 2 }];
+  p.defs += [Def { df_name: "goblin", df_cell: "goblin" }];
+  p.scenes += [Scene { sc_name: "hall", sc_w: 320, sc_h: 200 }];
+  p.placed += [Placed { pd_scene: "hall", pd_order: 0, pd_def: "goblin", pd_x: 10.0, pd_y: 10.0 }];
+  p.placed += [Placed { pd_scene: "hall", pd_order: 1, pd_def: "goblin", pd_x: 300.0, pd_y: 150.0 }];
+  pixels: vector<u8> = [];
+  for i in 0..4 * 2 * 4 { pixels += [(i * 7 % 251) as u8 ?? 0]; }
+  blob_put(blobs, "page/mobs", Rgba, pixels);
+}
+
+// @PAK-001 — a pack is TWO files read two ways.  `pack_read` reads the metadata whole and
+// brings back a page's shape without one texel; the bytes come out of the other file one key
+// at a time, through `prefetch`.  A loader that looks for pixels in the metadata finds names.
+fn test_a_pack_is_two_files_read_two_ways() {
+  base = base_for("halves");
+  clean(base);
+  p = new_pack();
+  blobs: hash<Blob[bl_key]> = [];
+  small_pack(p, blobs);
+  assert(pack_write(p, blobs, base), "written");
+  q = new_pack();
+  assert(pack_read(q, base), "the metadata, whole");
+  assert(q.pages["mobs"].pi_w == 4 && q.pages["mobs"].pi_blob == "page/mobs", "the page's shape, and the KEY of its bytes");
+  res: hash<Blob[bl_key]> = [];
+  assert(prefetch(res, blobs_path(base), ["page/mobs"]) == 1, "the bytes, by key");
+  bytes = res["page/mobs"].bl_bytes ?? [];
+  assert(len(bytes) == 32, "4 x 2 texels x 4 bytes");
+  clean(base);
+}
+
+// @PAK-002 — ask at a boundary, and a frame can assert zero.  `keys_near` answers each page
+// once however many instances share it; `prefetch` answers the round trips it paid, and skips
+// what is resident, so the second call answers 0.
+fn test_prefetch_answers_the_round_trips_it_paid() {
+  base = base_for("boundary");
+  clean(base);
+  p = new_pack();
+  blobs: hash<Blob[bl_key]> = [];
+  small_pack(p, blobs);
+  assert(pack_write(p, blobs, base), "written");
+  q = new_pack();
+  assert(pack_read(q, base), "read");
+  keys = keys_near(q, "hall", 0.0, 0.0, -1.0);
+  assert(len(keys) == 1, "two instances, one shared page, one key");
+  res: hash<Blob[bl_key]> = [];
+  assert(prefetch(res, blobs_path(base), keys) == 1, "the boundary pays one fetch");
+  assert(prefetch(res, blobs_path(base), keys) == 0, "a frame afterwards pays none");
+  clean(base);
+}
+
+// @PAK-003 — an animation is a row of data, and a missing one answers EMPTY.  `anim_of` reads
+// the `"{def}/{action}/{facing}"` row; an action the definition lacks answers "" rather than a
+// plausible wrong sequence, so a game can tell "no such animation" from "this one".
+fn test_a_missing_animation_answers_empty() {
+  p = new_pack();
+  p.anims += [Anim { an_key: "goblin/walk/2", an_def: "goblin", an_action: "walk", an_facing: 2, an_seq: "goblin_walk_n" }];
+  assert(anim_of(p, "goblin", "walk", 2) == "goblin_walk_n", "the row answers its sequence");
+  assert(anim_of(p, "goblin", "walk", 3) == "", "another facing is another row");
+  assert(anim_of(p, "goblin", "jump", 2) == "", "an action the def lacks answers empty");
+}

@@ -1,0 +1,161 @@
+// Copyright (c) 2026 Jurjen Stellingwerff
+// SPDX-License-Identifier: LGPL-3.0-or-later
+// @NAME: Getting Started
+// @TITLE: Build a content pack, write it as two files, and read back only what a scene needs.
+//
+// `assets` is a game's content pack — texture pages, sprites, animations, audio and the scenes
+// that place them — stored as a loft store. There is no codec: the struct definitions in
+// `src/assets.loft` ARE the file layout, so a pack can sit on a dumb file server and a browser
+// reads it by HTTP range, fetching only the pages a lookup touches.
+//
+// It does not decode images or draw: a texture page arrives already as premultiplied RGBA
+// bytes, decoded by whatever built the pack (`imaging` reads PNGs), and drawing it is
+// `graphics`' job. It is not a general file format either — a pack holds what the struct
+// definitions say, and nothing else.
+use assets::*;
+
+// A path nothing else writes to, and the files a pack and its schema leave beside it.
+fn base_for(name: text) -> text { "{temp_dir() ?? "."}/loft_assets_guide_{name}" }
+
+fn clean(base: text) {
+  for f in [meta_path(base), blobs_path(base), "{meta_path(base)}.dschema", "{blobs_path(base)}.dschema"] {
+    if file(f).exists() { _ = delete(f); }
+  }
+}
+
+// A small pack: one 4x2 texture page, a sprite cut out of it, and a scene placing it twice.
+fn small_pack(p: Pack, blobs: &hash<Blob[bl_key]>) {
+  p.pages += [PageInfo { pi_name: "mobs", pi_w: 4, pi_h: 2, pi_blob: "page/mobs" }];
+  p.cells += [Cell { ce_key: "goblin", ce_page: "mobs", ce_x: 0, ce_y: 0, ce_w: 2, ce_h: 2 }];
+  p.defs += [Def { df_name: "goblin", df_cell: "goblin" }];
+  p.scenes += [Scene { sc_name: "hall", sc_w: 320, sc_h: 200 }];
+  p.placed += [Placed { pd_scene: "hall", pd_order: 0, pd_def: "goblin", pd_x: 10.0, pd_y: 10.0 }];
+  p.placed += [Placed { pd_scene: "hall", pd_order: 1, pd_def: "goblin", pd_x: 300.0, pd_y: 150.0 }];
+  pixels: vector<u8> = [];
+  for i in 0..4 * 2 * 4 { pixels += [(i * 7 % 251) as u8 ?? 0]; }
+  blob_put(blobs, "page/mobs", Rgba, pixels);
+}
+
+fn main() {
+  base = base_for("main");
+  clean(base);
+  p = new_pack();
+  blobs: hash<Blob[bl_key]> = [];
+  small_pack(p, blobs);
+  assert(pack_write(p, blobs, base), "both halves written");
+
+  q = new_pack();
+  assert(pack_read(q, base), "the metadata half, read whole");
+  page = q.pages["mobs"];
+  println("page    : {page.pi_w}x{page.pi_h}, held in '{page.pi_blob}'");
+  assert(page.pi_w == 4 && page.pi_h == 2, "the page's shape came back without its pixels");
+  clean(base);
+
+  // Every section below is a function, and `main` calls each one: a section nothing calls
+  // still compiles, but its assertions never run.
+  two_files_read_two_ways();
+  fetch_at_a_boundary();
+  animations_are_data();
+  check_the_layout_at_boot();
+}
+
+// That prints:
+//
+//     page    : 4x2, held in 'page/mobs'
+//
+// The page's dimensions came back, and not one of its texels did: they live in the other file.
+//
+// ## The one that bites: a pack is TWO files, read two different ways
+//
+// `pack_write(pack, blobs, base)` writes `base.meta.store` — every page, cell, definition,
+// animation and placed instance — and `base.blobs.store`, the bytes. The metadata is small and
+// read WHOLE at boot with `pack_read`. The bytes are never read whole: `prefetch` pulls one
+// key's record out of the blobs file and nothing else. A loader that reads the metadata and
+// then looks for pixels in it finds names, not bytes.
+
+fn two_files_read_two_ways() {
+  base = base_for("halves");
+  clean(base);
+  p = new_pack();
+  blobs: hash<Blob[bl_key]> = [];
+  small_pack(p, blobs);
+  assert(pack_write(p, blobs, base), "written");
+  assert(file(meta_path(base)).exists() && file(blobs_path(base)).exists(), "two files");
+
+  q = new_pack();
+  assert(pack_read(q, base), "read");
+  res: hash<Blob[bl_key]> = [];
+  assert(len(res) == 0, "no bytes are resident after the metadata read");
+  assert(prefetch(res, blobs_path(base), ["page/mobs"]) == 1, "one key, one fetch");
+  bytes = res["page/mobs"].bl_bytes ?? [];
+  assert(len(bytes) == 32, "4 x 2 texels x 4 bytes");
+  clean(base);
+  println("halves  : metadata read whole, bytes fetched by key");
+}
+
+// ## Fetch at a boundary, never in a frame
+//
+// A fetch is a round trip — over HTTP it is a range read — and a frame is 16 ms. So ask what a
+// scene needs at a load or a level boundary: `keys_near(pack, scene, x, y, radius)` answers the
+// blob keys of the pages the instances near a point draw from, with each page once however many
+// instances share it, and `prefetch` fetches them. `prefetch` answers how many round trips it
+// paid for, and skips what is already resident, so a second call answers 0 — which is what a
+// frame can assert. A negative radius means the whole scene.
+
+fn fetch_at_a_boundary() {
+  base = base_for("boundary");
+  clean(base);
+  p = new_pack();
+  blobs: hash<Blob[bl_key]> = [];
+  small_pack(p, blobs);
+  assert(pack_write(p, blobs, base), "written");
+  q = new_pack();
+  assert(pack_read(q, base), "read");
+
+  near = keys_near(q, "hall", 0.0, 0.0, 50.0);
+  whole = keys_near(q, "hall", 0.0, 0.0, -1.0);
+  assert("{near}" == "[\"page/mobs\"]", "the instance at (10,10) is near the corner");
+  assert(len(whole) == 1, "two instances share one page, so one key");
+  assert(len(keys_near(q, "hall", 160.0, 100.0, 10.0)) == 0, "nothing is placed in the middle");
+
+  res: hash<Blob[bl_key]> = [];
+  assert(prefetch(res, blobs_path(base), whole) == 1, "the level boundary pays one fetch");
+  assert(prefetch(res, blobs_path(base), whole) == 0, "and a frame afterwards pays none");
+  clean(base);
+  println("fetch   : keys_near at a boundary, prefetch answers the round trips");
+}
+
+// ## Animations are data, not code
+//
+// A definition's animation table maps `(action, facing)` to a sequence, keyed
+// `"{def}/{action}/{facing}"`. `anim_of(pack, def, action, facing)` answers the sequence name,
+// and an action the definition does not have answers "" rather than a plausible wrong one — so
+// a walk cycle can change without a line of game code changing.
+
+fn animations_are_data() {
+  p = new_pack();
+  p.anims += [Anim { an_key: "goblin/walk/2", an_def: "goblin", an_action: "walk", an_facing: 2, an_seq: "goblin_walk_n" }];
+  assert(anim_of(p, "goblin", "walk", 2) == "goblin_walk_n", "the table answers the sequence");
+  assert(anim_of(p, "goblin", "jump", 2) == "", "an action it does not have answers empty");
+  println("anims   : (action, facing) -> sequence, from the pack");
+}
+
+// ## Check the layout at boot
+//
+// Because the structs ARE the layout, a pack built by a different version of this library can
+// read as plausible garbage instead of failing. `layout_fingerprint()` is one number over every
+// pack type's fields; compare it with the one the packer recorded and refuse on a mismatch.
+// `layout_descriptor()` is the readable version, field by field, for finding what moved.
+
+fn check_the_layout_at_boot() {
+  f = layout_fingerprint();
+  assert(f == layout_fingerprint(), "the same build answers the same number");
+  assert(layout_descriptor().contains("Placed"), "the descriptor names every pack type");
+  println("layout  : one number to compare, a descriptor to read when it differs");
+}
+
+// ## Where to go next
+//
+// - `README.md` — the two files, the paging unit (size a blob like an atlas page), and the
+//   collision proxies a packer derives from a cell's alpha (`cell_proxy`).
+// - `tests/pack.loft` and `tests/scene.loft` — the round trip and the scene queries, as tests.

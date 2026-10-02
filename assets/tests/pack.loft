@@ -167,3 +167,16 @@ fn test_the_two_halves_are_separate_files() {
   assert(meta_path(base) != blobs_path(base), "two names, not one");
   clean(base);
 }
+
+// A second put under one key replaces the first: one blob, the newer bytes.
+fn test_a_blob_put_twice_under_one_key_is_one_blob() {
+  b: hash<Blob[bl_key]> = [];
+  blob_put(b, "page/a", Bytes, [1 as u8]);
+  blob_put(b, "page/a", Png, [2 as u8, 3 as u8]);
+  blob_put(b, "page/b", Bytes, [9 as u8]);
+  n = 0;
+  for _x in b { n += 1; }
+  assert(len(b) == 2 && n == 2, "two keys, two blobs: len {len(b)}, walk {n}");
+  got = b["page/a"].bl_bytes ?? [];
+  assert(len(got) == 2 && b["page/a"].bl_kind == Png, "the newer blob");
+}

@@ -191,12 +191,14 @@ fn is_url(base: text) -> boolean {
     || base.starts_with("file://")
 }
 
-/// Put a blob under its key, ready to be written.
-///
-/// Use this rather than appending: `+=` on a `&hash` parameter retypes it to a
-/// `vector<Blob>` and the program stops compiling.
+/// Put a blob under its key, ready to be written.  A blob already under the key is
+/// replaced, which is what a packer re-running over changed art wants.
 pub fn blob_put(b: &hash<Blob[bl_key]>, key: text, kind: BlobKind,
                 bytes: const vector<u8>) {
+  // The old blob is removed first rather than replaced in one assignment: a loft before
+  // the fix of keyed replacement under a TEXT key kept both records (`len` 2 under one
+  // key).  A removal by key was always exact, so this is right on every loft.
+  b[key] = null;
   b[key] = Blob { bl_key: key, bl_kind: kind, bl_bytes: bytes };
 }
 
@@ -207,6 +209,7 @@ pub fn blob_put(b: &hash<Blob[bl_key]>, key: text, kind: BlobKind,
 /// lookup one RUN of pages instead of a scatter — the difference between a range
 /// read that pays for a page and one that pays for the file. Writing needs a
 /// desktop; a browser reads packs and does not build them.
+// Example: @PAK-001
 pub fn pack_write(p: const Pack, blobs: const hash<Blob[bl_key]>,
                   base: text) -> boolean {
   if !store_persist_copy(p, meta_path(base)) { return false }
@@ -237,6 +240,7 @@ pub fn pack_read(p: Pack, base: text) -> boolean {
 /// answers `"goblin_walk_n"` with nothing in a game's source holding the mapping, and
 /// an action the definition does not have answers empty rather than a plausible wrong
 /// sequence.
+// Example: @PAK-003
 pub fn anim_of(p: const Pack, def: text, action: text, facing: integer) -> text {
   row = p.anims["{def}/{action}/{facing}"];
   if row == null { return "" }
@@ -280,6 +284,7 @@ pub fn keys_near(p: const Pack, scene: text, cx: float, cy: float,
 /// the number of round trips this call paid for: what a level boundary wants to log,
 /// and what a frame must be able to assert is zero. A key the pack does not hold is
 /// skipped too — an absent asset costs a lookup, not a record.
+// Example: @PAK-002
 pub fn prefetch(into: hash<Blob[bl_key]>, source: text,
                 keys: const vector<text>) -> integer {
   // A `file://` base names a file on this machine, and the paged loader takes the
