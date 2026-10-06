@@ -6,7 +6,7 @@
 // a field that moves reads a neighbour's value out of packs already in the wild.
 use assets::*;
 
-/// What the layout of `assets` 0.2.0 hashes to.
+/// What the layout of `assets` 0.4.0 hashes to.
 ///
 /// A CHANGE HERE IS A FORMAT CHANGE.  Packs written by an earlier release are read at
 /// the offsets this number stands for, so if this test fails, one of two things
@@ -20,15 +20,21 @@ use assets::*;
 ///
 /// 0.1.0 hashed to 21440911.  It moved at 0.2.0 because `Cell` gained `ce_proxy`
 /// (@PLN146 F7) — the FIRST answer above, an edit we made, so `data_compatible_with`
-/// moved with it.  The old number stays written down here: a pin nobody can compare
-/// against does not say a format changed, only that one is different.
+/// moved with it.  0.2.0 to 0.3.1 hashed to 2433656147.  It moved at 0.4.0 with no
+/// edit here — the SECOND answer: loft's C138 rounds a record's size up to its
+/// alignment (`(L-Align)`), so `Blob` went 9 -> 12, `Cell` 60 -> 64, `Def` 73 -> 80,
+/// `Scene` 20 -> 24 and `Placed` 98 -> 104 bytes, every field at the position it had.
+/// A collection's element stride is its record's size, so a 0.3.x pack is refused by
+/// a loft with C138 (it names those five types) rather than misread.  The old numbers
+/// stay written down here: a pin nobody can compare against does not say a format
+/// changed, only that one is different.
 ///
 /// Measured identical on the interpreter and `--native`.
-LAYOUT_0_2_0 = 2433656147;
+LAYOUT_0_4_0 = 3641078007;
 
 fn test_the_layout_of_this_release_is_the_one_it_promises() {
-  assert(layout_fingerprint() == LAYOUT_0_2_0,
-         "the pack layout changed: {layout_fingerprint()} (was {LAYOUT_0_2_0}) — read the note on LAYOUT_0_2_0, and layout_descriptor() for the field that moved");
+  assert(layout_fingerprint() == LAYOUT_0_4_0,
+         "the pack layout changed: {layout_fingerprint()} (was {LAYOUT_0_4_0}) — read the note on LAYOUT_0_4_0, and layout_descriptor() for the field that moved");
 }
 
 fn test_the_fingerprint_is_taken_over_real_content() {
