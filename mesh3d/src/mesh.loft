@@ -8,9 +8,9 @@ use math::*;
 
 // A single vertex with position, normal, and texture coordinates.
 pub struct Vertex {
-  pos: math::Vec3,
-  normal: math::Vec3,
-  uv: math::Vec2
+  pub pos: math::Vec3,
+  pub normal: math::Vec3,
+  pub uv: math::Vec2
 }
 
 // One vertex: where it is, which way it faces, and where it samples a texture.
@@ -22,16 +22,16 @@ pub fn vertex(vp: math::Vec3, vn: math::Vec3, vuv: math::Vec2) -> Vertex {
 
 // A triangle defined by three vertex indices.
 pub struct Triangle {
-  a: integer,
-  b: integer,
-  c: integer
+  pub a: integer,
+  pub b: integer,
+  pub c: integer
 }
 
 // A mesh: a collection of vertices and triangles.
 pub struct Mesh {
-  name: text,
-  vertices: vector<Vertex>,
-  triangles: vector<Triangle>
+  pub name: text,
+  pub vertices: vector<Vertex>,
+  pub triangles: vector<Triangle>
 }
 
 // An empty mesh under a name.  Fill it with `add_vertex`, then `add_triangle`
