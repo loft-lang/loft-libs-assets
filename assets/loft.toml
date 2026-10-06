@@ -1,7 +1,12 @@
 [package]
 name    = "assets"
-version = "0.4.0"
-loft    = ">=2026.9.0"
+version = "0.4.1"
+loft    = ">=2026.10.20261006"   # the first loft with C138 (L-Align) is the main build of
+                                 # 2026-10-06; loft 2026.10.0 predates it.  0.4.0 shipped
+                                 # with the old >=2026.9.0 floor, so on 2026.10.0 its layout
+                                 # test failed and its packs missed their declared format.
+                                 # 0.4.1 is 0.4.0 with this floor: same API, same pack
+                                 # format, so both compatibility lines below stand.
 description = "A game's content pack that IS a loft store — art, audio and the scenes that place them, range-read off a static file server.  No codec, no parse step, no server-side code."
 categories  = ["game", "asset-format"]
 
