@@ -1,6 +1,6 @@
 [package]
 name    = "assets"
-version = "0.3.1"
+version = "0.4.0"
 loft    = ">=2026.9.0"
 description = "A game's content pack that IS a loft store — art, audio and the scenes that place them, range-read off a static file server.  No codec, no parse step, no server-side code."
 categories  = ["game", "asset-format"]
@@ -10,8 +10,11 @@ api_compatible_with  = "0.2.0"   # 0.3.0 is additive: `Tile`, `texels` and `page
                                  # the DECLARED BREAK — `Cell` gained `ce_proxy`, and a
                                  # pack is a STORE, so the struct definitions ARE the
                                  # file layout and a 0.1.0 pack is not readable here.
-data_compatible_with = "0.2.0"   # unchanged by 0.3.0: no packed type gained a field,
-                                 # and `layout_fingerprint()` still answers what it did
+data_compatible_with = "0.4.0"   # loft's C138 (L-Align) padded five packed records to
+                                 # their alignment, so the element strides moved:
+                                 # a 0.3.x pack is refused, not misread.  0.2.0 was
+                                 # the floor before; `layout_fingerprint()` moved
+                                 # with it (tests/layout.loft keeps both numbers)
 
 [library]
 entry = "src/assets.loft"
