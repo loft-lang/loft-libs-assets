@@ -9,13 +9,13 @@ use mesh::*;
 
 // A simple PBR-like material.
 pub struct Material {
-  name: text,
-  base_color_r: float,
-  base_color_g: float,
-  base_color_b: float,
-  base_color_a: float,
-  metallic: float,
-  roughness: float
+  pub name: text,
+  pub base_color_r: float,
+  pub base_color_g: float,
+  pub base_color_b: float,
+  pub base_color_a: float,
+  pub metallic: float,
+  pub roughness: float
 }
 
 // A neutral material: light grey, half rough, not metal.  Everything below
@@ -57,10 +57,10 @@ pub fn set_color(self: Material, scr: float, scg: float, scb: float) {
 
 // A node in the scene graph with a mesh, material, and transform.
 pub struct Node {
-  name: text,
-  mesh_idx: integer,
-  material_idx: integer,
-  transform: math::Mat4
+  pub name: text,
+  pub mesh_idx: integer,
+  pub material_idx: integer,
+  pub transform: math::Mat4
 }
 
 // Put a mesh in the scene at the origin, naming the mesh and the material by
@@ -82,11 +82,11 @@ pub fn node_at(nn: text, nm: integer, nmat: integer, xf: math::Mat4) -> Node {
 // DEGREES and its clipping planes.  `camera` below builds one with defaults.
 pub struct Camera {
   name: text,
-  fov: float,
-  near: float,
-  far: float,
-  position: math::Vec3,
-  target: math::Vec3
+  pub fov: float,
+  pub near: float,
+  pub far: float,
+  pub position: math::Vec3,
+  pub target: math::Vec3
 }
 
 // A camera with usable defaults: field 60, clipping at 0.1 and 100, standing at
@@ -115,14 +115,14 @@ pub enum LightType { Directional, Point, Spot }
 // A punctual light (glTF's KHR_lights_punctual): its kind, colour, intensity, and
 // the position or direction the kind uses.
 pub struct Light {
-  name: text,
-  light_type: LightType,
-  color_r: float,
-  color_g: float,
-  color_b: float,
-  intensity: float,
-  position: math::Vec3,
-  direction: math::Vec3
+  pub name: text,
+  pub light_type: LightType,
+  pub color_r: float,
+  pub color_g: float,
+  pub color_b: float,
+  pub intensity: float,
+  pub position: math::Vec3,
+  pub direction: math::Vec3
 }
 
 // A light with a direction and no place — the sun.  Every surface in the scene
@@ -149,12 +149,12 @@ pub fn point_light(ln: text, lr: float, lg: float, lb: float, li: float, lpos: m
 
 // A complete 3D scene.
 pub struct Scene {
-  name: text,
-  meshes: vector<mesh::Mesh>,
-  materials: vector<Material>,
-  nodes: vector<Node>,
+  pub name: text,
+  pub meshes: vector<mesh::Mesh>,
+  pub materials: vector<Material>,
+  pub nodes: vector<Node>,
   cameras: vector<Camera>,
-  lights: vector<Light>
+  pub lights: vector<Light>
 }
 
 // An empty scene.  The five `add_*` below fill it, and each answers the INDEX

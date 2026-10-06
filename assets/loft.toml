@@ -1,6 +1,6 @@
 [package]
 name    = "assets"
-version = "0.4.1"
+version = "0.4.2"
 loft    = ">=2026.10.20261006"   # the first loft with C138 (L-Align) is the main build of
                                  # 2026-10-06; loft 2026.10.0 predates it.  0.4.0 shipped
                                  # with the old >=2026.9.0 floor, so on 2026.10.0 its layout

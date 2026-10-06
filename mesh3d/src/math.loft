@@ -7,8 +7,8 @@
 
 // A 2D vector / point.
 pub struct Vec2 {
-  x: float,
-  y: float
+  pub x: float,
+  pub y: float
 }
 
 // Make one.  Texture coordinates are what this is usually carrying.
@@ -18,9 +18,9 @@ pub fn vec2(vx: float, vy: float) -> Vec2 {
 
 // A 3D vector / point.
 pub struct Vec3 {
-  x: float,
-  y: float,
-  z: float
+  pub x: float,
+  pub y: float,
+  pub z: float
 }
 
 // Make one.  The workhorse of the package — positions, normals and directions
@@ -105,7 +105,7 @@ pub fn normalize3(nv: const Vec3) -> Vec3 {
 // A 4x4 transformation matrix stored as 16 floats in column-major order.
 // m[0..3] = column 0, m[4..7] = column 1, m[8..11] = column 2, m[12..15] = column 3.
 pub struct Mat4 {
-  m: vector<float>
+  pub m: vector<float>
 }
 
 // Create an identity matrix.
