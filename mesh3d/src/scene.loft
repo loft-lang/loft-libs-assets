@@ -153,7 +153,7 @@ pub struct Scene {
   pub meshes: vector<mesh::Mesh>,
   pub materials: vector<Material>,
   pub nodes: vector<Node>,
-  cameras: vector<Camera>,
+  pub cameras: vector<Camera>,
   pub lights: vector<Light>
 }
 
