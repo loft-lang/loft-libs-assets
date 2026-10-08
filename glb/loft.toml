@@ -1,6 +1,6 @@
 [package]
 name    = "glb"
-version = "0.1.6"
+version = "0.1.7"
 loft    = ">=2026.10.0"
 
 api_compatible_with  = "0.1.0"   # oldest own release this is a drop-in for
@@ -9,4 +9,4 @@ data_compatible_with = "0.1.0"   # oldest own release whose stored data this rea
 entry = "src/glb.loft"
 
 [dependencies]
-mesh3d = ">=0.1.1"
+mesh3d = ">=0.1.4"   # the first mesh3d whose fields other files read are `pub` (loft C140)
