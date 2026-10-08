@@ -4,6 +4,14 @@
 use mesh3d::*;
 use scene::*;
 
+// A consumer reads back the cameras a scene holds (moros's map scene does): the field is
+// readable outside this library, like the scene's other collections.
+fn test_a_scene_lists_its_cameras() {
+  sc = scene("view");
+  sc.add_camera(camera("main"));
+  assert(len(sc.cameras) == 1 && sc.cameras[0].position.z == 5.0, "one camera at z 5, got {len(sc.cameras)}");
+}
+
 fn test_scene_create() {
   sc = scene::scene("test scene");
   assert(sc.name == "test scene", "scene name");
