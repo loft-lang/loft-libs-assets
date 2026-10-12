@@ -1,12 +1,11 @@
 [package]
 name    = "assets"
-version = "0.4.2"
-loft    = ">=2026.10.20261006"   # the first loft with C138 (L-Align) is the main build of
-                                 # 2026-10-06; loft 2026.10.0 predates it.  0.4.0 shipped
-                                 # with the old >=2026.9.0 floor, so on 2026.10.0 its layout
-                                 # test failed and its packs missed their declared format.
-                                 # 0.4.1 is 0.4.0 with this floor: same API, same pack
-                                 # format, so both compatibility lines below stand.
+version = "0.5.0"
+loft    = ">=2026.10.20261012"   # the first loft whose `index` is a B+tree (C147) is the
+                                 # main build of 2026-10-12.  An older loft keeps resolving
+                                 # to 0.4.2, whose pack layout is the one it writes; its
+                                 # own floor, >=2026.10.20261006, named the first loft
+                                 # with C138 (L-Align).
 description = "A game's content pack that IS a loft store — art, audio and the scenes that place them, range-read off a static file server.  No codec, no parse step, no server-side code."
 categories  = ["game", "asset-format"]
 
@@ -15,11 +14,13 @@ api_compatible_with  = "0.2.0"   # 0.3.0 is additive: `Tile`, `texels` and `page
                                  # the DECLARED BREAK — `Cell` gained `ce_proxy`, and a
                                  # pack is a STORE, so the struct definitions ARE the
                                  # file layout and a 0.1.0 pack is not readable here.
-data_compatible_with = "0.4.0"   # loft's C138 (L-Align) padded five packed records to
-                                 # their alignment, so the element strides moved:
-                                 # a 0.3.x pack is refused, not misread.  0.2.0 was
-                                 # the floor before; `layout_fingerprint()` moved
-                                 # with it (tests/layout.loft keeps both numbers)
+data_compatible_with = "0.5.0"   # loft's C147 keeps an index's tree apart from its
+                                 # records, so `Placed` lost the three link fields the
+                                 # red-black tree kept in it and went 104 -> 96 bytes:
+                                 # a 0.4.x pack is refused, not misread.  0.4.0 was
+                                 # the floor before (C138's alignment), 0.2.0 before
+                                 # that; `layout_fingerprint()` moved each time
+                                 # (tests/layout.loft keeps every number)
 
 [library]
 entry = "src/assets.loft"

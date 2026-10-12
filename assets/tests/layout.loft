@@ -6,7 +6,7 @@
 // a field that moves reads a neighbour's value out of packs already in the wild.
 use assets::*;
 
-/// What the layout of `assets` 0.4.0 hashes to.
+/// What the layout of `assets` 0.5.0 hashes to.
 ///
 /// A CHANGE HERE IS A FORMAT CHANGE.  Packs written by an earlier release are read at
 /// the offsets this number stands for, so if this test fails, one of two things
@@ -25,16 +25,22 @@ use assets::*;
 /// alignment (`(L-Align)`), so `Blob` went 9 -> 12, `Cell` 60 -> 64, `Def` 73 -> 80,
 /// `Scene` 20 -> 24 and `Placed` 98 -> 104 bytes, every field at the position it had.
 /// A collection's element stride is its record's size, so a 0.3.x pack is refused by
-/// a loft with C138 (it names those five types) rather than misread.  The old numbers
-/// stay written down here: a pin nobody can compare against does not say a format
-/// changed, only that one is different.
+/// a loft with C138 (it names those five types) rather than misread.  0.4.0 to 0.4.2
+/// hashed to 3641078007.  It moved at 0.5.0, again with no edit here: loft's C147 makes
+/// an `index` a B+tree kept in an arena of its own, so `Placed`, the element of the
+/// pack's `placed` index, no longer carries the red-black tree's links (`#left_1` at
+/// 88, `#right_1` at 92, `#color_1` at 96).  `pd_visible` moved from 97 to 88 and
+/// `Placed` went 104 -> 96 bytes; no other record changed.  A 0.4.x pack is refused by
+/// a loft with C147 (it names `Placed` and its index) rather than misread: `pack_read`
+/// answers false.  The old numbers stay written down here: a pin nobody can compare
+/// against does not say a format changed, only that one is different.
 ///
 /// Measured identical on the interpreter and `--native`.
-LAYOUT_0_4_0 = 3641078007;
+LAYOUT_0_5_0 = 755486205;
 
 fn test_the_layout_of_this_release_is_the_one_it_promises() {
-  assert(layout_fingerprint() == LAYOUT_0_4_0,
-         "the pack layout changed: {layout_fingerprint()} (was {LAYOUT_0_4_0}) — read the note on LAYOUT_0_4_0, and layout_descriptor() for the field that moved");
+  assert(layout_fingerprint() == LAYOUT_0_5_0,
+         "the pack layout changed: {layout_fingerprint()} (was {LAYOUT_0_5_0}) — read the note on LAYOUT_0_5_0, and layout_descriptor() for the field that moved");
 }
 
 fn test_the_fingerprint_is_taken_over_real_content() {
