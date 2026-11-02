@@ -97,7 +97,7 @@ fn test_one_key_reads_without_the_rest_of_the_pack() {
   got = prefetch(res, blobs_path(base), ["hit.ogg"]);
   assert(got == 1, "the fetch cost one round trip");
   clip = res["hit.ogg"];
-  assert(clip != null && len(clip.bl_bytes ?? []) == 2048, "the clip arrived whole");
+  assert(clip != null && len(clip.bl_bytes) == 2048, "the clip arrived whole");
   n = 0;
   for _r in res { n += 1; }
   assert(n == 1, "only the requested key is resident, not the two pages");
