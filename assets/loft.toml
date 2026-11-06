@@ -1,6 +1,6 @@
 [package]
 name    = "assets"
-version = "0.5.1"
+version = "0.5.2"
 loft    = ">=2026.10.20261012"   # the first loft whose `index` is a B+tree (C147) is the
                                  # main build of 2026-10-12.  An older loft keeps resolving
                                  # to 0.4.2, whose pack layout is the one it writes; its
