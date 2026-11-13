@@ -92,3 +92,33 @@ fn test_glb_json_padding() {
   }
   delete("test_glb_e.glb");
 }
+
+// The JSON chunk of a scene holding one directional light facing `d`.
+fn light_json(d: math::Vec3, path: text) -> text {
+  lj_sc = scene::scene("lit");
+  lj_sc.add_light(scene::directional_light("sun", 1.0, 1.0, 1.0, 2.0, d));
+  glb::save_scene_glb(lj_sc, path);
+  lj_json = "";
+  {lj_f = file(path);
+   lj_f#format = LittleEndian;
+   lj_f#read(4) as i32;  // magic
+   lj_f#read(4) as i32;  // version
+   lj_f#read(4) as i32;  // total_len
+   lj_len = lj_f#read(4) as i32;
+   lj_f#read(4) as i32;  // chunk type
+   lj_json = lj_f#read(lj_len as integer) as text;
+  }
+  delete(path);
+  lj_json
+}
+
+// A light's node carries the rotation turning -z onto its direction: the identity facing -z, a
+// half turn about y facing +z, and an eighth of a turn about y facing +x.
+fn test_glb_light_rotation() {
+  ahead = light_json(math::vec3(0.0, 0.0, -1.0), "test_glb_l1.glb");
+  assert(ahead.contains("\"rotation\":[0.000000,0.000000,0.000000,1.000000]"), "facing -z: {ahead}");
+  behind = light_json(math::vec3(0.0, 0.0, 1.0), "test_glb_l2.glb");
+  assert(behind.contains("\"rotation\":[0.000000,1.000000,0.000000,0.000000]"), "facing +z: {behind}");
+  side = light_json(math::vec3(1.0, 0.0, 0.0), "test_glb_l3.glb");
+  assert(side.contains("\"rotation\":[0.000000,-0.707107,0.000000,0.707107]"), "facing +x: {side}");
+}
